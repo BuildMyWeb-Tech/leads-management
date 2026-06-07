@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../utils/api';
+import { LEAD_SOURCES, LEAD_STATUSES } from '../constants/leadConstants';
 import toast from 'react-hot-toast';
 
-const SOURCES = ['YouTube', 'Google Ads', 'Facebook', 'Instagram', 'Referral', 'Walk-in', 'Website', 'Other'];
-const STATUSES = ['New', 'Contacted', 'Interested', 'Not Interested', 'Closed'];
+const BUDGETS = ['Under 40L', '40L–60L', '60L–80L', '80L–1Cr', '1Cr–1.5Cr', '1.5Cr+'];
+const PROPERTIES = ['2BHK Apartment', '3BHK Villa', 'Studio Flat', 'Plot / Land', 'Commercial Space', 'Other'];
 
 const INITIAL = {
   name: '', phone: '', email: '',
@@ -25,6 +26,11 @@ export default function AddLead() {
       toast.error('Name and Phone are required');
       return;
     }
+    // Basic phone validation
+    if (!/^[6-9]\d{9}$/.test(form.phone.replace(/\s/g, ''))) {
+      toast.error('Enter a valid 10-digit mobile number');
+      return;
+    }
     setLoading(true);
     try {
       await api.post('/leads', form);
@@ -37,11 +43,8 @@ export default function AddLead() {
     }
   };
 
-  const handleReset = () => setForm(INITIAL);
-
   return (
     <div className="max-w-2xl">
-
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Link to="/leads" className="text-gray-400 hover:text-gray-600">
@@ -57,100 +60,70 @@ export default function AddLead() {
 
           {/* Basic Info */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-              Contact Information
-            </h3>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Contact details</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="label">
-                  Full Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  className="input"
-                  value={form.name}
-                  onChange={set('name')}
-                  placeholder="e.g. Suresh Patel"
-                  required
-                />
+                <label className="label">Name <span className="text-red-400">*</span></label>
+                <input className="input" placeholder="Full name" value={form.name} onChange={set('name')} />
               </div>
               <div>
-                <label className="label">
-                  Phone Number <span className="text-red-500">*</span>
-                </label>
-                <input
-                  className="input"
-                  value={form.phone}
-                  onChange={set('phone')}
-                  placeholder="e.g. 9876543210"
-                  required
-                />
+                <label className="label">Phone <span className="text-red-400">*</span></label>
+                <input className="input" placeholder="10-digit mobile" value={form.phone} onChange={set('phone')} inputMode="tel" maxLength={10} />
               </div>
               <div className="sm:col-span-2">
-                <label className="label">Email Address</label>
-                <input
-                  className="input"
-                  type="email"
-                  value={form.email}
-                  onChange={set('email')}
-                  placeholder="e.g. suresh@email.com"
-                />
+                <label className="label">Email</label>
+                <input className="input" type="email" placeholder="Optional" value={form.email} onChange={set('email')} />
               </div>
             </div>
           </div>
 
-          {/* Lead Details */}
+          {/* Lead details */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-              Lead Details
-            </h3>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Lead details</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="label">Source</label>
                 <select className="input" value={form.source} onChange={set('source')}>
-                  {SOURCES.map((s) => <option key={s}>{s}</option>)}
+                  {LEAD_SOURCES.map((s) => <option key={s}>{s}</option>)}
                 </select>
               </div>
               <div>
-                <label className="label">Status</label>
+                <label className="label">Initial status</label>
                 <select className="input" value={form.status} onChange={set('status')}>
-                  {STATUSES.map((s) => <option key={s}>{s}</option>)}
+                  {LEAD_STATUSES.map((s) => <option key={s}>{s}</option>)}
                 </select>
               </div>
               <div>
-                <label className="label">Property Interest</label>
-                <input
-                  className="input"
-                  value={form.propertyInterest}
-                  onChange={set('propertyInterest')}
-                  placeholder="e.g. 2BHK Apartment"
-                />
+                <label className="label">Property interest</label>
+                <select className="input" value={form.propertyInterest} onChange={set('propertyInterest')}>
+                  <option value="">— Select —</option>
+                  {PROPERTIES.map((p) => <option key={p}>{p}</option>)}
+                </select>
               </div>
               <div>
-                <label className="label">Budget Range</label>
-                <input
-                  className="input"
-                  value={form.budget}
-                  onChange={set('budget')}
-                  placeholder="e.g. 60L–80L"
-                />
+                <label className="label">Budget range</label>
+                <select className="input" value={form.budget} onChange={set('budget')}>
+                  <option value="">— Select —</option>
+                  {BUDGETS.map((b) => <option key={b}>{b}</option>)}
+                </select>
               </div>
             </div>
           </div>
 
           {/* Notes */}
           <div>
-            <label className="label">Notes</label>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Notes</h3>
             <textarea
               className="input"
               rows={3}
+              placeholder="Any initial notes about this lead..."
               value={form.notes}
               onChange={set('notes')}
-              placeholder="Any additional information about this lead..."
             />
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-3 pt-1">
+          <div className="flex gap-3 pt-2">
             <button type="submit" disabled={loading} className="btn-primary">
               {loading ? (
                 <>
@@ -160,16 +133,15 @@ export default function AddLead() {
                   </svg>
                   Saving...
                 </>
-              ) : (
-                'Add Lead'
-              )}
+              ) : 'Save Lead'}
             </button>
-            <button type="button" onClick={handleReset} className="btn-secondary">
+            <button
+              type="button"
+              onClick={() => setForm(INITIAL)}
+              className="btn-ghost"
+            >
               Reset
             </button>
-            <Link to="/leads" className="btn-ghost ml-auto">
-              Cancel
-            </Link>
           </div>
         </form>
       </div>

@@ -240,7 +240,7 @@ export default function CSVUpload() {
         <pre className="text-xs text-gray-600 bg-white border border-gray-200 rounded p-3 overflow-x-auto leading-5">
 {`Name,Phone,Email,Source,Status
 Suresh Patel,9876543210,suresh@example.com,YouTube,New
-Meena Joshi,9812345678,meena@example.com,Google Ads,Contacted
+Meena Joshi,9812345678,meena@example.com,Google Ads,Called
 Vikram Nair,9834567890,,Facebook,Interested
 Sonal Gupta,9856789012,sonal@example.com,Referral,New`}
         </pre>
@@ -248,7 +248,7 @@ Sonal Gupta,9856789012,sonal@example.com,Referral,New`}
         <p className="text-xs text-gray-400 mt-2">
           Valid Sources: YouTube, Google Ads, Facebook, Instagram, Referral, Walk-in, Website, Other
           <br />
-          Valid Statuses: New, Contacted, Interested, Not Interested, Closed
+          Valid Statuses: New, Allocated, Called, Follow Up, Site Visit Planned, Site Visit Done, Interested, Negotiation, Booked, Wrong Number, Not Interested, Closed
         </p>
       </div>
     </div>
