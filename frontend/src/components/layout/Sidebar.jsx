@@ -5,7 +5,7 @@ const NAV_LINKS = [
   {
     to: '/dashboard',
     label: 'Dashboard',
-    roles: ['admin', 'manager', 'employee'],
+    roles: ['admin', 'director', 'telecaller'],
     icon: (
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -15,7 +15,7 @@ const NAV_LINKS = [
   {
     to: '/leads',
     label: 'All Leads',
-    roles: ['admin', 'manager', 'employee'],
+    roles: ['admin', 'director', 'telecaller'],
     icon: (
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -25,7 +25,7 @@ const NAV_LINKS = [
   {
     to: '/leads/add',
     label: 'Add Lead',
-    roles: ['admin', 'manager'],
+    roles: ['admin', 'director'],
     icon: (
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -45,7 +45,7 @@ const NAV_LINKS = [
   {
     to: '/allocate',
     label: 'Allocate Leads',
-    roles: ['admin', 'manager'],
+    roles: ['admin', 'director'],
     icon: (
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
@@ -55,9 +55,15 @@ const NAV_LINKS = [
 ];
 
 const ROLE_BADGE = {
-  admin:    'bg-purple-100 text-purple-700',
-  manager:  'bg-blue-100 text-blue-700',
-  employee: 'bg-green-100 text-green-700',
+  admin:      'bg-purple-100 text-purple-700',
+  director:   'bg-blue-100 text-blue-700',
+  telecaller: 'bg-green-100 text-green-700',
+};
+
+const ROLE_LABEL = {
+  admin:      'Admin',
+  director:   'Director',
+  telecaller: 'Telecaller',
 };
 
 export default function Sidebar() {
@@ -82,7 +88,7 @@ export default function Sidebar() {
             </svg>
           </div>
           <div>
-            <h1 className="text-sm font-bold text-gray-900 leading-none">LeadFlow</h1>
+            <h1 className="text-sm font-bold text-gray-900 leading-none">VMS</h1>
             <p className="text-xs text-gray-400 mt-0.5">Real Estate CRM</p>
           </div>
         </div>
@@ -116,8 +122,8 @@ export default function Sidebar() {
           </div>
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-800 truncate">{user?.name}</p>
-            <span className={`text-xs px-1.5 py-0.5 rounded font-medium capitalize ${ROLE_BADGE[user?.role]}`}>
-              {user?.role}
+            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${ROLE_BADGE[user?.role]}`}>
+              {ROLE_LABEL[user?.role] || user?.role}
             </span>
           </div>
         </div>

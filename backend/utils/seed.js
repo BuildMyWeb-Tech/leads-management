@@ -9,7 +9,6 @@ const seed = async () => {
   await mongoose.connect(process.env.MONGO_URI);
   console.log('✅ Connected to MongoDB');
 
-  // Wipe existing data
   await User.deleteMany({});
   await Lead.deleteMany({});
   console.log('🗑  Cleared existing users and leads');
@@ -22,46 +21,51 @@ const seed = async () => {
     role: 'admin',
   });
 
-  const manager1 = await User.create({
+  const dir1 = await User.create({
     name: 'Rajesh Kumar',
-    email: 'manager@test.com',
+    email: 'director@test.com',
     password: 'password',
-    role: 'manager',
+    role: 'director',
   });
 
-  const manager2 = await User.create({
+  const dir2 = await User.create({
     name: 'Priya Sharma',
-    email: 'manager2@test.com',
+    email: 'director2@test.com',
     password: 'password',
-    role: 'manager',
+    role: 'director',
   });
 
-  const emp1 = await User.create({
+  const tc1 = await User.create({
     name: 'Amit Singh',
-    email: 'employee@test.com',
+    email: 'telecaller@test.com',
     password: 'password',
-    role: 'employee',
+    role: 'telecaller',
   });
 
-  const emp2 = await User.create({
+  const tc2 = await User.create({
     name: 'Neha Verma',
-    email: 'employee2@test.com',
+    email: 'telecaller2@test.com',
     password: 'password',
-    role: 'employee',
+    role: 'telecaller',
   });
 
-  const emp3 = await User.create({
+  const tc3 = await User.create({
     name: 'Karan Mehta',
-    email: 'employee3@test.com',
+    email: 'telecaller3@test.com',
     password: 'password',
-    role: 'employee',
+    role: 'telecaller',
   });
 
   console.log('👤 Users created (6)');
 
   // ── Create Sample Leads ───────────────────────────────────
   const sources = ['YouTube', 'Google Ads', 'Facebook', 'Instagram', 'Referral', 'Walk-in', 'Website'];
-  const statuses = ['New', 'Contacted', 'Interested', 'Not Interested', 'Closed'];
+  const statuses = [
+    'New', 'Allocated', 'Called', 'Follow Up',
+    'Site Visit Planned', 'Site Visit Done',
+    'Interested', 'Negotiation', 'Booked',
+    'Wrong Number', 'Not Interested', 'Closed',
+  ];
   const budgets = ['40L-60L', '60L-80L', '80L-1Cr', '1Cr-1.5Cr', '1.5Cr+'];
   const properties = ['2BHK Apartment', '3BHK Villa', 'Studio Flat', 'Plot / Land', 'Commercial Space'];
 
@@ -84,14 +88,12 @@ const seed = async () => {
       budget: budgets[i % budgets.length],
       propertyInterest: properties[i % properties.length],
       notes: i % 4 === 0 ? `Follow up scheduled. Interested in ${properties[i % properties.length]}.` : '',
-      // Allocate first 10 to manager1, next 10 to manager2, last 5 unassigned
-      assignedManager: i < 10 ? manager1._id : i < 20 ? manager2._id : null,
-      // Allocate employees within each manager's set
-      assignedEmployee:
-        i < 4 ? emp1._id :
-        i < 8 ? emp2._id :
-        i < 12 ? emp3._id :
-        i < 16 ? emp1._id :
+      assignedDirector: i < 10 ? dir1._id : i < 20 ? dir2._id : null,
+      assignedTelecaller:
+        i < 4  ? tc1._id :
+        i < 8  ? tc2._id :
+        i < 12 ? tc3._id :
+        i < 16 ? tc1._id :
         null,
     };
   });
@@ -103,9 +105,10 @@ const seed = async () => {
   console.log('✅ Seed completed successfully!');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('Demo Login Credentials:');
-  console.log('  Admin    → admin@test.com    / password');
-  console.log('  Manager  → manager@test.com  / password');
-  console.log('  Employee → employee@test.com / password');
+  console.log('  Admin      → admin@test.com       / password');
+  console.log('  Director   → director@test.com    / password');
+  console.log('  Director 2 → director2@test.com   / password');
+  console.log('  Telecaller → telecaller@test.com  / password');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
   process.exit(0);

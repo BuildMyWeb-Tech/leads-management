@@ -8,13 +8,13 @@ export default function Allocate() {
   const { user } = useAuth();
 
   const [leads, setLeads] = useState([]);
-  const [managers, setManagers] = useState([]);
-  const [employees, setEmployees] = useState([]);
+  const [directors, setDirectors] = useState([]);
+  const [telecallers, setTelecallers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [selected, setSelected] = useState(new Set());
-  const [assignManager, setAssignManager] = useState('');
-  const [assignEmployee, setAssignEmployee] = useState('');
+  const [assignDirector, setAssignDirector] = useState('');
+  const [assignTelecaller, setAssignTelecaller] = useState('');
   const [saving, setSaving] = useState(false);
 
   const [showAll, setShowAll] = useState(false);
@@ -32,16 +32,15 @@ export default function Allocate() {
   useEffect(() => {
     fetchLeads();
     if (user.role === 'admin') {
-      api.get('/users?role=manager').then((r) => setManagers(r.data));
+      api.get('/users?role=director').then((r) => setDirectors(r.data));
     }
-    api.get('/users?role=employee').then((r) => setEmployees(r.data));
+    api.get('/users?role=telecaller').then((r) => setTelecallers(r.data));
   }, [user.role]);
 
-  // Leads to display
   const displayLeads = showAll
     ? leads
     : leads.filter((l) =>
-        user.role === 'admin' ? !l.assignedManager : !l.assignedEmployee
+        user.role === 'admin' ? !l.assignedDirector : !l.assignedTelecaller
       );
 
   const toggleSelect = (id) => {
@@ -62,20 +61,20 @@ export default function Allocate() {
 
   const handleAssign = async () => {
     if (selected.size === 0) return toast.error('Select at least one lead');
-    if (!assignManager && !assignEmployee)
-      return toast.error('Choose a manager or employee to assign to');
+    if (!assignDirector && !assignTelecaller)
+      return toast.error('Choose a director or telecaller to assign to');
 
     setSaving(true);
     try {
       const body = { leadIds: [...selected] };
-      if (user.role === 'admin' && assignManager) body.assignedManager = assignManager;
-      if (assignEmployee) body.assignedEmployee = assignEmployee;
+      if (user.role === 'admin' && assignDirector) body.assignedDirector = assignDirector;
+      if (assignTelecaller) body.assignedTelecaller = assignTelecaller;
 
       const { data } = await api.post('/leads/bulk-assign', body);
       toast.success(data.message);
       setSelected(new Set());
-      setAssignManager('');
-      setAssignEmployee('');
+      setAssignDirector('');
+      setAssignTelecaller('');
       await fetchLeads();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Assignment failed');
@@ -89,13 +88,12 @@ export default function Allocate() {
 
   return (
     <div>
-      {/* Header */}
       <div className="mb-5">
         <h2 className="page-title">Allocate Leads</h2>
         <p className="text-sm text-gray-400 mt-0.5">
           {user.role === 'admin'
-            ? 'Assign leads to managers and employees'
-            : 'Assign your leads to employees'}
+            ? 'Assign leads to directors and telecallers'
+            : 'Assign your leads to telecallers'}
         </p>
       </div>
 
@@ -104,39 +102,38 @@ export default function Allocate() {
         <h3 className="text-sm font-semibold text-gray-700 mb-4">Assignment Controls</h3>
         <div className="flex flex-wrap items-end gap-4">
 
-          {/* Assign to Manager — Admin only */}
+          {/* Assign to Director — Admin only */}
           {user.role === 'admin' && (
             <div>
-              <label className="label">Assign to Manager</label>
+              <label className="label">Assign to Director</label>
               <select
                 className="input w-52"
-                value={assignManager}
-                onChange={(e) => setAssignManager(e.target.value)}
+                value={assignDirector}
+                onChange={(e) => setAssignDirector(e.target.value)}
               >
-                <option value="">— Select Manager —</option>
-                {managers.map((m) => (
-                  <option key={m._id} value={m._id}>{m.name}</option>
+                <option value="">— Select Director —</option>
+                {directors.map((d) => (
+                  <option key={d._id} value={d._id}>{d.name}</option>
                 ))}
               </select>
             </div>
           )}
 
-          {/* Assign to Employee */}
+          {/* Assign to Telecaller */}
           <div>
-            <label className="label">Assign to Employee</label>
+            <label className="label">Assign to Telecaller</label>
             <select
               className="input w-52"
-              value={assignEmployee}
-              onChange={(e) => setAssignEmployee(e.target.value)}
+              value={assignTelecaller}
+              onChange={(e) => setAssignTelecaller(e.target.value)}
             >
-              <option value="">— Select Employee —</option>
-              {employees.map((e) => (
-                <option key={e._id} value={e._id}>{e.name}</option>
+              <option value="">— Select Telecaller —</option>
+              {telecallers.map((t) => (
+                <option key={t._id} value={t._id}>{t.name}</option>
               ))}
             </select>
           </div>
 
-          {/* Assign Button */}
           <button
             onClick={handleAssign}
             disabled={saving || selected.size === 0}
@@ -174,7 +171,12 @@ export default function Allocate() {
           <span className="text-sm text-gray-600">
             Showing{' '}
             <span className="font-medium text-gray-900">{displayLeads.length}</span>{' '}
-            {showAll ? 'total' : user.role === 'admin' ? 'unassigned (no manager)' : 'unassigned (no employee)'} leads
+            {showAll
+              ? 'total'
+              : user.role === 'admin'
+              ? 'unassigned (no director)'
+              : 'unassigned (no telecaller)'}{' '}
+            leads
           </span>
           <button
             onClick={() => { setShowAll((v) => !v); setSelected(new Set()); }}
@@ -220,8 +222,8 @@ export default function Allocate() {
                   <th className="table-th hidden sm:table-cell">Phone</th>
                   <th className="table-th hidden md:table-cell">Source</th>
                   <th className="table-th">Status</th>
-                  <th className="table-th hidden lg:table-cell">Manager</th>
-                  <th className="table-th hidden lg:table-cell">Employee</th>
+                  <th className="table-th hidden lg:table-cell">Director</th>
+                  <th className="table-th hidden lg:table-cell">Telecaller</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -258,15 +260,15 @@ export default function Allocate() {
                         <StatusBadge status={lead.status} />
                       </td>
                       <td className="table-td hidden lg:table-cell text-xs">
-                        {lead.assignedManager ? (
-                          <span className="text-gray-700">{lead.assignedManager.name}</span>
+                        {lead.assignedDirector ? (
+                          <span className="text-gray-700">{lead.assignedDirector.name}</span>
                         ) : (
                           <span className="text-orange-400 font-medium">Unassigned</span>
                         )}
                       </td>
                       <td className="table-td hidden lg:table-cell text-xs">
-                        {lead.assignedEmployee ? (
-                          <span className="text-gray-700">{lead.assignedEmployee.name}</span>
+                        {lead.assignedTelecaller ? (
+                          <span className="text-gray-700">{lead.assignedTelecaller.name}</span>
                         ) : (
                           <span className="text-orange-400 font-medium">Unassigned</span>
                         )}

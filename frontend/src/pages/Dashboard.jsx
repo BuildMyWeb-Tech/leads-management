@@ -140,12 +140,12 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Manager Performance — Admin only */}
-        {user?.role === 'admin' && (stats?.managerStats || []).length > 0 && (
+        {/* Director Performance — Admin only */}
+        {user?.role === 'admin' && (stats?.directorStats || []).length > 0 && (
           <div className="card">
-            <h3 className="text-sm font-semibold text-gray-800 mb-4">Leads per Manager</h3>
+            <h3 className="text-sm font-semibold text-gray-800 mb-4">Leads per Director</h3>
             <div className="space-y-2">
-              {stats.managerStats.map((m) => (
+              {stats.directorStats.map((m) => (
                 <div key={m._id} className="flex items-center justify-between">
                   <span className="text-sm text-gray-700">{m.name}</span>
                   <div className="flex items-center gap-2">

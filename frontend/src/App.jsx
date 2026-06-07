@@ -1,10 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 
-// Layout
 import Sidebar from './components/layout/Sidebar';
-
-// Pages
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Leads from './pages/Leads';
@@ -12,7 +9,6 @@ import AddLead from './pages/AddLead';
 import CSVUpload from './pages/CSVUpload';
 import Allocate from './pages/Allocate';
 
-// Full-screen spinner for initial auth check
 function Spinner() {
   return (
     <div className="flex items-center justify-center h-screen bg-gray-50">
@@ -27,7 +23,6 @@ function Spinner() {
   );
 }
 
-// Wraps authenticated pages: checks login + optional role guard
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
 
@@ -72,11 +67,11 @@ export default function App() {
           }
         />
 
-        {/* Admin + Manager only */}
+        {/* Admin + Director */}
         <Route
           path="/leads/add"
           element={
-            <ProtectedRoute allowedRoles={['admin', 'manager']}>
+            <ProtectedRoute allowedRoles={['admin', 'director']}>
               <AddLead />
             </ProtectedRoute>
           }
@@ -84,7 +79,7 @@ export default function App() {
         <Route
           path="/allocate"
           element={
-            <ProtectedRoute allowedRoles={['admin', 'manager']}>
+            <ProtectedRoute allowedRoles={['admin', 'director']}>
               <Allocate />
             </ProtectedRoute>
           }

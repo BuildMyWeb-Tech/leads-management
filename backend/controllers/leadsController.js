@@ -1,25 +1,31 @@
 const Lead = require('../models/Lead');
 const XLSX = require('xlsx');
 
+const LEAD_STATUSES = [
+  'New', 'Allocated', 'Called', 'Follow Up',
+  'Site Visit Planned', 'Site Visit Done',
+  'Interested', 'Negotiation', 'Booked',
+  'Wrong Number', 'Not Interested', 'Closed',
+];
+
 // @route  GET /api/leads
 // @access Private - All roles (scoped by role)
 const getLeads = async (req, res) => {
   try {
-    const { status, source, assignedManager, assignedEmployee, search, page = 1, limit = 50 } = req.query;
+    const { status, source, assignedDirector, assignedTelecaller, search, page = 1, limit = 50 } = req.query;
     const filter = {};
 
     // Role-based data scoping
-    if (req.user.role === 'manager') {
-      filter.assignedManager = req.user._id;
-    } else if (req.user.role === 'employee') {
-      filter.assignedEmployee = req.user._id;
+    if (req.user.role === 'director') {
+      filter.assignedDirector = req.user._id;
+    } else if (req.user.role === 'telecaller') {
+      filter.assignedTelecaller = req.user._id;
     }
 
-    // Optional filters (admin only for manager filter)
     if (status) filter.status = status;
     if (source) filter.source = source;
-    if (assignedManager && req.user.role === 'admin') filter.assignedManager = assignedManager;
-    if (assignedEmployee) filter.assignedEmployee = assignedEmployee;
+    if (assignedDirector && req.user.role === 'admin') filter.assignedDirector = assignedDirector;
+    if (assignedTelecaller) filter.assignedTelecaller = assignedTelecaller;
 
     if (search) {
       filter.$or = [
@@ -31,8 +37,8 @@ const getLeads = async (req, res) => {
 
     const total = await Lead.countDocuments(filter);
     const leads = await Lead.find(filter)
-      .populate('assignedManager', 'name email')
-      .populate('assignedEmployee', 'name email')
+      .populate('assignedDirector', 'name email')
+      .populate('assignedTelecaller', 'name email')
       .sort({ createdAt: -1 })
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit));
@@ -44,7 +50,7 @@ const getLeads = async (req, res) => {
 };
 
 // @route  POST /api/leads
-// @access Private - Admin, Manager
+// @access Private - Admin, Director
 const createLead = async (req, res) => {
   try {
     const lead = await Lead.create(req.body);
@@ -59,8 +65,8 @@ const createLead = async (req, res) => {
 const getLead = async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id)
-      .populate('assignedManager', 'name email')
-      .populate('assignedEmployee', 'name email');
+      .populate('assignedDirector', 'name email')
+      .populate('assignedTelecaller', 'name email');
 
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
     res.json(lead);
@@ -70,30 +76,41 @@ const getLead = async (req, res) => {
 };
 
 // @route  PUT /api/leads/:id
-// @access Private - All roles (employees: status + notes only)
+// @access Private
 const updateLead = async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
 
-    // Employee can only update status and notes
-    if (req.user.role === 'employee') {
+    // Telecaller: status + notes only
+    if (req.user.role === 'telecaller') {
       if (req.body.status !== undefined) lead.status = req.body.status;
       if (req.body.notes !== undefined) lead.notes = req.body.notes;
       await lead.save();
       const updated = await Lead.findById(lead._id)
-        .populate('assignedManager', 'name email')
-        .populate('assignedEmployee', 'name email');
+        .populate('assignedDirector', 'name email')
+        .populate('assignedTelecaller', 'name email');
       return res.json(updated);
     }
 
-    // Admin / Manager can update all fields
+    // Director: cannot reassign director, can assign telecaller + update status/notes
+    if (req.user.role === 'director') {
+      const allowed = ['status', 'notes', 'assignedTelecaller'];
+      allowed.forEach(f => { if (req.body[f] !== undefined) lead[f] = req.body[f]; });
+      await lead.save();
+      const updated = await Lead.findById(lead._id)
+        .populate('assignedDirector', 'name email')
+        .populate('assignedTelecaller', 'name email');
+      return res.json(updated);
+    }
+
+    // Admin: full access
     Object.assign(lead, req.body);
     await lead.save();
 
     const updated = await Lead.findById(lead._id)
-      .populate('assignedManager', 'name email')
-      .populate('assignedEmployee', 'name email');
+      .populate('assignedDirector', 'name email')
+      .populate('assignedTelecaller', 'name email');
 
     res.json(updated);
   } catch (err) {
@@ -114,18 +131,18 @@ const deleteLead = async (req, res) => {
 };
 
 // @route  POST /api/leads/bulk-assign
-// @access Private - Admin, Manager
+// @access Private - Admin, Director
 const bulkAssign = async (req, res) => {
   try {
-    const { leadIds, assignedManager, assignedEmployee } = req.body;
+    const { leadIds, assignedDirector, assignedTelecaller } = req.body;
 
     if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
       return res.status(400).json({ message: 'leadIds array is required' });
     }
 
     const update = {};
-    if (assignedManager !== undefined) update.assignedManager = assignedManager || null;
-    if (assignedEmployee !== undefined) update.assignedEmployee = assignedEmployee || null;
+    if (assignedDirector !== undefined) update.assignedDirector = assignedDirector || null;
+    if (assignedTelecaller !== undefined) update.assignedTelecaller = assignedTelecaller || null;
 
     const result = await Lead.updateMany(
       { _id: { $in: leadIds } },
@@ -154,7 +171,6 @@ const importCSV = async (req, res) => {
 
     if (!rows.length) return res.status(400).json({ message: 'File is empty or has no data rows' });
 
-    // Auto-map columns by normalizing header names
     const normalize = (key) => key.toLowerCase().replace(/[\s_\-().]/g, '');
     const fieldAliases = {
       name: ['name', 'fullname', 'clientname', 'leadname', 'customername', 'contactname'],
@@ -173,13 +189,12 @@ const importCSV = async (req, res) => {
 
     if (!mapping.name || !mapping.phone) {
       return res.status(400).json({
-        message: 'Could not detect Name or Phone columns. Please check your file headers.',
+        message: 'Could not detect Name or Phone columns.',
         detectedHeaders: headers,
         tip: 'Expected headers like: Name, Phone, Email, Source, Status',
       });
     }
 
-    const validStatuses = ['New', 'Contacted', 'Interested', 'Not Interested', 'Closed'];
     const validSources = ['YouTube', 'Google Ads', 'Facebook', 'Instagram', 'Referral', 'Walk-in', 'Website', 'Other'];
 
     const leads = rows
@@ -192,7 +207,7 @@ const importCSV = async (req, res) => {
           phone: String(row[mapping.phone]).trim(),
           email: mapping.email ? String(row[mapping.email]).trim() : '',
           source: validSources.includes(rawSource) ? rawSource : 'Other',
-          status: validStatuses.includes(rawStatus) ? rawStatus : 'New',
+          status: LEAD_STATUSES.includes(rawStatus) ? rawStatus : 'New',
         };
       });
 
@@ -216,10 +231,10 @@ const importCSV = async (req, res) => {
 const getDashboardStats = async (req, res) => {
   try {
     const filter = {};
-    if (req.user.role === 'manager') filter.assignedManager = req.user._id;
-    if (req.user.role === 'employee') filter.assignedEmployee = req.user._id;
+    if (req.user.role === 'director') filter.assignedDirector = req.user._id;
+    if (req.user.role === 'telecaller') filter.assignedTelecaller = req.user._id;
 
-    const [totalLeads, statusStats, sourceStats, recentLeads, managerStats] = await Promise.all([
+    const [totalLeads, statusStats, sourceStats, recentLeads, directorStats] = await Promise.all([
       Lead.countDocuments(filter),
 
       Lead.aggregate([
@@ -237,25 +252,25 @@ const getDashboardStats = async (req, res) => {
       Lead.find(filter)
         .sort({ createdAt: -1 })
         .limit(5)
-        .populate('assignedManager', 'name')
-        .populate('assignedEmployee', 'name'),
+        .populate('assignedDirector', 'name')
+        .populate('assignedTelecaller', 'name'),
 
       req.user.role === 'admin'
         ? Lead.aggregate([
-            { $match: { assignedManager: { $ne: null } } },
-            { $group: { _id: '$assignedManager', count: { $sum: 1 } } },
-            { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'manager' } },
-            { $unwind: '$manager' },
-            { $project: { name: '$manager.name', count: 1 } },
+            { $match: { assignedDirector: { $ne: null } } },
+            { $group: { _id: '$assignedDirector', count: { $sum: 1 } } },
+            { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'director' } },
+            { $unwind: '$director' },
+            { $project: { name: '$director.name', count: 1 } },
             { $sort: { count: -1 } },
             { $limit: 10 },
           ])
         : Promise.resolve([]),
     ]);
 
-    const unassigned = await Lead.countDocuments({ ...filter, assignedManager: null });
+    const unassigned = await Lead.countDocuments({ ...filter, assignedDirector: null });
 
-    res.json({ totalLeads, unassigned, statusStats, sourceStats, managerStats, recentLeads });
+    res.json({ totalLeads, unassigned, statusStats, sourceStats, directorStats, recentLeads });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -1,12 +1,17 @@
 const User = require('../models/User');
 
 // @route  GET /api/users
-// @access Private - Admin, Manager
+// @access Private - Admin, Director
 const getUsers = async (req, res) => {
   try {
     const { role } = req.query;
     const filter = {};
     if (role) filter.role = role;
+
+    // Directors can only see telecallers (to assign leads)
+    if (req.user.role === 'director') {
+      filter.role = 'telecaller';
+    }
 
     const users = await User.find(filter).select('-password').sort({ createdAt: -1 });
     res.json(users);
@@ -34,7 +39,7 @@ const createUser = async (req, res) => {
       name,
       email,
       password,
-      role: role || 'employee',
+      role: role || 'telecaller',
     });
 
     res.status(201).json(user);

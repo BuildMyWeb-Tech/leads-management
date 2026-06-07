@@ -71,7 +71,7 @@ export default function Leads() {
           <h2 className="page-title">Leads</h2>
           <p className="text-sm text-gray-400 mt-0.5">{total} total records</p>
         </div>
-        {(user.role === 'admin' || user.role === 'manager') && (
+        {(user.role === 'admin' || user.role === 'director') && (
           <Link to="/leads/add" className="btn-primary">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -111,7 +111,7 @@ export default function Leads() {
         ) : leads.length === 0 ? (
           <div className="py-12 text-center text-sm text-gray-400">
             No leads found.{' '}
-            {(user.role === 'admin' || user.role === 'manager') && (
+            {(user.role === 'admin' || user.role === 'director') && (
               <Link to="/leads/add" className="text-blue-600 hover:underline">Add one?</Link>
             )}
           </div>
@@ -124,8 +124,8 @@ export default function Leads() {
                   <th className="table-th">Phone</th>
                   <th className="table-th hidden md:table-cell">Source</th>
                   <th className="table-th">Status</th>
-                  <th className="table-th hidden lg:table-cell">Manager</th>
-                  <th className="table-th hidden lg:table-cell">Employee</th>
+                  <th className="table-th hidden lg:table-cell">Director</th>
+                  <th className="table-th hidden lg:table-cell">Telecaller</th>
                   <th className="table-th hidden xl:table-cell">Date</th>
                   <th className="table-th">Actions</th>
                 </tr>
@@ -169,12 +169,12 @@ export default function Leads() {
 
                     {/* Manager */}
                     <td className="table-td hidden lg:table-cell text-gray-500 text-xs">
-                      {lead.assignedManager?.name || <span className="text-gray-300">—</span>}
+                      {lead.assignedDirector?.name || <span className="text-gray-300">—</span>}
                     </td>
 
                     {/* Employee */}
                     <td className="table-td hidden lg:table-cell text-gray-500 text-xs">
-                      {lead.assignedEmployee?.name || <span className="text-gray-300">—</span>}
+                      {lead.assignedTelecaller?.name || <span className="text-gray-300">—</span>}
                     </td>
 
                     {/* Date */}

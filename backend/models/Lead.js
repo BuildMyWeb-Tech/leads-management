@@ -10,17 +10,32 @@ const leadSchema = new mongoose.Schema(
       enum: ['YouTube', 'Google Ads', 'Facebook', 'Instagram', 'Referral', 'Walk-in', 'Website', 'Other'],
       default: 'Other',
     },
+    // PHASE 1: expanded status pipeline (used fully from Phase 2 UI, stored from now)
     status: {
       type: String,
-      enum: ['New', 'Contacted', 'Interested', 'Not Interested', 'Closed'],
+      enum: [
+        'New',
+        'Allocated',
+        'Called',
+        'Follow Up',
+        'Site Visit Planned',
+        'Site Visit Done',
+        'Interested',
+        'Negotiation',
+        'Booked',
+        'Wrong Number',
+        'Not Interested',
+        'Closed',
+      ],
       default: 'New',
     },
-    assignedManager: {
+    // PHASE 1: renamed fields — manager → director, employee → telecaller
+    assignedDirector: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       default: null,
     },
-    assignedEmployee: {
+    assignedTelecaller: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       default: null,
