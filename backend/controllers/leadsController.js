@@ -3,31 +3,28 @@ const XLSX = require('xlsx');
 const { pickNextDirector } = require('../utils/allocationEngine');
 
 const LEAD_STATUSES = [
-  'New', 'Allocated', 'Called', 'Follow Up',
-  'Site Visit Planned', 'Site Visit Done',
-  'Interested', 'Negotiation', 'Booked',
-  'Wrong Number', 'Not Interested', 'Closed',
+  'New','Allocated','Called','Follow Up',
+  'Site Visit Planned','Site Visit Done',
+  'Interested','Negotiation','Booked',
+  'Wrong Number','Not Interested','Closed',
 ];
 
 const LEAD_SOURCES = [
-  'YouTube', 'Google Ads', 'Facebook', 'Instagram',
-  'Referral', 'Walk-in', 'Website', 'Other',
+  'YouTube','Google Ads','Facebook','Instagram',
+  'Referral','Walk-in','Website','Other',
 ];
 
 const TELECALLER_ALLOWED_STATUSES = [
-  'Called', 'Follow Up', 'Site Visit Planned', 'Site Visit Done',
-  'Interested', 'Negotiation', 'Wrong Number', 'Not Interested',
+  'Called','Follow Up','Site Visit Planned','Site Visit Done',
+  'Interested','Negotiation','Wrong Number','Not Interested',
 ];
 
 // ── GET /api/leads ────────────────────────────────────────────
 const getLeads = async (req, res) => {
   try {
-    const {
-      status, source, assignedDirector, assignedTelecaller,
-      search, page = 1, limit = 25,
-    } = req.query;
-
+    const { status, source, assignedDirector, assignedTelecaller, search, page = 1, limit = 25 } = req.query;
     const filter = {};
+
     if (req.user.role === 'director')   filter.assignedDirector   = req.user._id;
     if (req.user.role === 'telecaller') filter.assignedTelecaller = req.user._id;
 
@@ -59,12 +56,10 @@ const getLeads = async (req, res) => {
 };
 
 // ── POST /api/leads ───────────────────────────────────────────
-// Auto-allocates to a director if config is active and no director manually set
 const createLead = async (req, res) => {
   try {
     const leadData = { ...req.body };
 
-    // Auto-allocation: only if no director explicitly provided
     if (!leadData.assignedDirector) {
       try {
         const pick = await pickNextDirector();
@@ -72,10 +67,7 @@ const createLead = async (req, res) => {
           leadData.assignedDirector = pick.directorId;
           leadData.status = 'Allocated';
         }
-      } catch (allocErr) {
-        // Non-fatal — lead is still created as New without a director
-        console.warn('Auto-allocation skipped:', allocErr.message);
-      }
+      } catch (e) { console.warn('Auto-allocation skipped:', e.message); }
     }
 
     const lead = await Lead.create(leadData);
@@ -107,6 +99,7 @@ const updateLead = async (req, res) => {
     const lead = await Lead.findById(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
 
+    // ── Telecaller: status (restricted) + notes + followUpDate ──
     if (req.user.role === 'telecaller') {
       if (req.body.status !== undefined) {
         if (!TELECALLER_ALLOWED_STATUSES.includes(req.body.status)) {
@@ -114,14 +107,22 @@ const updateLead = async (req, res) => {
         }
         lead.status = req.body.status;
       }
-      if (req.body.notes !== undefined) lead.notes = req.body.notes;
+      if (req.body.notes        !== undefined) lead.notes        = req.body.notes;
+      // PHASE 5: telecaller can set/clear follow-up date
+      if (req.body.followUpDate !== undefined) lead.followUpDate = req.body.followUpDate || null;
       await lead.save();
-    } else if (req.user.role === 'director') {
-      ['status', 'notes', 'assignedTelecaller'].forEach((f) => {
-        if (req.body[f] !== undefined) lead[f] = req.body[f];
+    }
+
+    // ── Director: status + notes + followUpDate + assignedTelecaller ──
+    else if (req.user.role === 'director') {
+      ['status','notes','followUpDate','assignedTelecaller'].forEach((f) => {
+        if (req.body[f] !== undefined) lead[f] = req.body[f] || null;
       });
       await lead.save();
-    } else {
+    }
+
+    // ── Admin: full access ──
+    else {
       Object.assign(lead, req.body);
       await lead.save();
     }
@@ -157,15 +158,10 @@ const bulkAssign = async (req, res) => {
     if (assignedTelecaller !== undefined) update.assignedTelecaller = assignedTelecaller || null;
 
     const result = await Lead.updateMany({ _id: { $in: leadIds } }, { $set: update });
-
     if (assignedDirector) {
-      await Lead.updateMany(
-        { _id: { $in: leadIds }, status: 'New' },
-        { $set: { status: 'Allocated' } }
-      );
+      await Lead.updateMany({ _id: { $in: leadIds }, status: 'New' }, { $set: { status: 'Allocated' } });
     }
-
-    res.json({ message: `${result.modifiedCount} lead(s) updated successfully`, modifiedCount: result.modifiedCount });
+    res.json({ message: `${result.modifiedCount} lead(s) updated`, modifiedCount: result.modifiedCount });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -213,21 +209,17 @@ const importCSV = async (req, res) => {
 
     if (!leads.length) return res.status(400).json({ message: 'No valid rows found' });
 
-    // Auto-allocate each imported lead if config is active
     const leadsToInsert = [];
     for (const leadData of leads) {
       try {
         const pick = await pickNextDirector();
-        if (pick) {
-          leadData.assignedDirector = pick.directorId;
-          leadData.status = 'Allocated';
-        }
-      } catch (_) { /* non-fatal */ }
+        if (pick) { leadData.assignedDirector = pick.directorId; leadData.status = 'Allocated'; }
+      } catch (_) {}
       leadsToInsert.push(leadData);
     }
 
     const inserted = await Lead.insertMany(leadsToInsert, { ordered: false });
-    res.json({ message: `${inserted.length} lead(s) imported and allocated`, count: inserted.length });
+    res.json({ message: `${inserted.length} lead(s) imported`, count: inserted.length });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -242,11 +234,10 @@ const getDashboardStats = async (req, res) => {
 
     const [totalLeads, statusStats, sourceStats, recentLeads, directorStats] = await Promise.all([
       Lead.countDocuments(filter),
-      Lead.aggregate([{ $match: filter }, { $group: { _id: '$status', count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
-      Lead.aggregate([{ $match: filter }, { $group: { _id: '$source', count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
+      Lead.aggregate([{ $match: filter },{ $group: { _id: '$status', count: { $sum: 1 } } },{ $sort: { count: -1 } }]),
+      Lead.aggregate([{ $match: filter },{ $group: { _id: '$source',  count: { $sum: 1 } } },{ $sort: { count: -1 } }]),
       Lead.find(filter).sort({ createdAt: -1 }).limit(5)
-        .populate('assignedDirector', 'name')
-        .populate('assignedTelecaller', 'name'),
+        .populate('assignedDirector','name').populate('assignedTelecaller','name'),
       req.user.role === 'admin'
         ? Lead.aggregate([
             { $match: { assignedDirector: { $ne: null } } },
