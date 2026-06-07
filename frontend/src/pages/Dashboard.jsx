@@ -4,6 +4,7 @@ import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { LEAD_STATUSES, STATUS_BAR_COLORS, STATUS_BADGE_CLASSES } from '../constants/leadConstants';
 
+// ── StatCard ──────────────────────────────────────────────────
 function StatCard({ label, value, color = 'text-gray-900', sub, icon }) {
   return (
     <div className="card flex items-start gap-3">
@@ -28,16 +29,31 @@ const PIPELINE_ORDER = [
 ];
 const DEAD_ORDER = ['Wrong Number', 'Not Interested', 'Closed'];
 
+// ── Dashboard ─────────────────────────────────────────────────
 export default function Dashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats]           = useState(null);
+  const [allocStats, setAllocStats] = useState(null);
+  const [loading, setLoading]       = useState(true);
 
   useEffect(() => {
-    api.get('/leads/dashboard/stats')
-      .then((r) => setStats(r.data))
-      .finally(() => setLoading(false));
-  }, []);
+    const fetchAll = async () => {
+      try {
+        const statsRes = await api.get('/leads/dashboard/stats');
+        setStats(statsRes.data);
+
+        if (user?.role === 'admin') {
+          try {
+            const aRes = await api.get('/allocation/stats');
+            setAllocStats(aRes.data);
+          } catch (_) {}
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAll();
+  }, [user]);
 
   if (loading) {
     return (
@@ -50,16 +66,15 @@ export default function Dashboard() {
     );
   }
 
-  const statusMap = Object.fromEntries((stats?.statusStats || []).map((s) => [s._id, s.count]));
-  const total = stats?.totalLeads || 0;
-  const booked    = statusMap['Booked']       || 0;
-  const interested= statusMap['Interested']   || 0;
-  const siteVisit = (statusMap['Site Visit Planned'] || 0) + (statusMap['Site Visit Done'] || 0);
-  const conversionRate = total > 0 ? Math.round((booked / total) * 100) : 0;
+  const statusMap       = Object.fromEntries((stats?.statusStats || []).map((s) => [s._id, s.count]));
+  const total           = stats?.totalLeads || 0;
+  const booked          = statusMap['Booked']              || 0;
+  const siteVisit       = (statusMap['Site Visit Planned'] || 0) + (statusMap['Site Visit Done'] || 0);
+  const conversionRate  = total > 0 ? Math.round((booked / total) * 100) : 0;
 
   return (
     <div>
-      {/* Header */}
+      {/* ── Header ───────────────────────────── */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="page-title">Dashboard</h2>
@@ -78,45 +93,62 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* KPI cards */}
+      {/* ── KPI cards ────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
           label="Total Leads" value={total}
-          icon={<svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
+          icon={
+            <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          }
         />
         <StatCard
           label="Unassigned" value={stats?.unassigned}
           color={stats?.unassigned > 0 ? 'text-orange-500' : 'text-green-600'}
           sub="needs allocation"
-          icon={<svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>}
+          icon={
+            <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          }
         />
         <StatCard
           label="Site Visits" value={siteVisit}
           color="text-purple-600"
-          icon={<svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
+          icon={
+            <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          }
         />
         <StatCard
           label="Booked" value={booked}
           color="text-emerald-600"
           sub={`${conversionRate}% conversion`}
-          icon={<svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+          icon={
+            <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          }
         />
       </div>
 
+      {/* ── Main grid ────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
         {/* Pipeline breakdown */}
         <div className="card lg:col-span-2">
           <h3 className="text-sm font-semibold text-gray-800 mb-4">Pipeline breakdown</h3>
 
-          {/* Active pipeline */}
           <div className="mb-4">
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Active stages</p>
             <div className="space-y-2">
               {PIPELINE_ORDER.map((s) => {
-                const count = statusMap[s] || 0;
-                const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-                const barColor = STATUS_BAR_COLORS[s] || 'bg-gray-400';
+                const count    = statusMap[s] || 0;
+                const pct      = total > 0 ? Math.round((count / total) * 100) : 0;
+                const barColor = STATUS_BAR_COLORS[s]    || 'bg-gray-400';
                 const badgeCls = STATUS_BADGE_CLASSES[s] || 'bg-gray-100 text-gray-500 ring-gray-200';
                 return (
                   <div key={s} className="flex items-center gap-3">
@@ -124,10 +156,7 @@ export default function Dashboard() {
                       {s}
                     </span>
                     <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                      <div
-                        className={`${barColor} h-1.5 rounded-full transition-all duration-500`}
-                        style={{ width: `${pct}%` }}
-                      />
+                      <div className={`${barColor} h-1.5 rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
                     </div>
                     <span className="text-xs text-gray-500 w-8 text-right font-medium">{count}</span>
                   </div>
@@ -136,12 +165,11 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Dead statuses */}
           <div>
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Closed / dead</p>
             <div className="flex flex-wrap gap-3">
               {DEAD_ORDER.map((s) => {
-                const count = statusMap[s] || 0;
+                const count    = statusMap[s] || 0;
                 const badgeCls = STATUS_BADGE_CLASSES[s] || 'bg-gray-100 text-gray-500';
                 return (
                   <div key={s} className="flex items-center gap-2">
@@ -157,7 +185,7 @@ export default function Dashboard() {
         {/* Right column */}
         <div className="flex flex-col gap-5">
 
-          {/* Source breakdown */}
+          {/* By source */}
           <div className="card flex-1">
             <h3 className="text-sm font-semibold text-gray-800 mb-3">By source</h3>
             <div className="space-y-2">
@@ -202,7 +230,49 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Recent leads */}
+      {/* ── Allocation engine status — Admin only ── */}
+      {user?.role === 'admin' && allocStats && (
+        <div className="card mt-5">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800">Allocation engine</h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {allocStats.config?.isActive
+                  ? <span className="text-green-600 font-medium">● Active</span>
+                  : <span className="text-gray-400">○ Inactive</span>
+                }
+                {allocStats.totalWeight > 0 && (
+                  <span className="ml-2">
+                    Cycle position: {allocStats.cursorPosition} / {allocStats.totalWeight}
+                  </span>
+                )}
+              </p>
+            </div>
+            <Link to="/allocation-config" className="btn-ghost text-xs py-1.5">
+              Configure →
+            </Link>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />
+              <span className="text-sm font-semibold text-gray-800">{allocStats.unallocated}</span>
+              <span className="text-xs text-gray-400">unallocated</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
+              <span className="text-sm font-semibold text-gray-800">{allocStats.allocated}</span>
+              <span className="text-xs text-gray-400">allocated</span>
+            </div>
+            {allocStats.unallocated > 0 && (
+              <Link to="/allocation-config" className="ml-auto text-xs text-blue-600 hover:underline font-medium">
+                Run allocation →
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Recent leads ─────────────────────── */}
       {(stats?.recentLeads || []).length > 0 && (
         <div className="card mt-5">
           <div className="flex items-center justify-between mb-3">

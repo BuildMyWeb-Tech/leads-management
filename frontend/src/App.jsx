@@ -8,6 +8,7 @@ import Leads from './pages/Leads';
 import AddLead from './pages/AddLead';
 import CSVUpload from './pages/CSVUpload';
 import Allocate from './pages/Allocate';
+import AllocationConfig from './pages/AllocationConfig';  // PHASE 3
 
 function Spinner() {
   return (
@@ -25,19 +26,13 @@ function Spinner() {
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
-
   if (loading) return <Spinner />;
   if (!user) return <Navigate to="/login" replace />;
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
+  if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/dashboard" replace />;
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto p-6 bg-gray-50">
-        {children}
-      </main>
+      <main className="flex-1 overflow-y-auto p-6 bg-gray-50">{children}</main>
     </div>
   );
 }
@@ -46,56 +41,18 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public */}
         <Route path="/login" element={<Login />} />
 
-        {/* All authenticated roles */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/leads"
-          element={
-            <ProtectedRoute>
-              <Leads />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/leads"     element={<ProtectedRoute><Leads /></ProtectedRoute>} />
 
-        {/* Admin + Director */}
-        <Route
-          path="/leads/add"
-          element={
-            <ProtectedRoute allowedRoles={['admin', 'director']}>
-              <AddLead />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/allocate"
-          element={
-            <ProtectedRoute allowedRoles={['admin', 'director']}>
-              <Allocate />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/leads/add"    element={<ProtectedRoute allowedRoles={['admin','director']}><AddLead /></ProtectedRoute>} />
+        <Route path="/allocate"     element={<ProtectedRoute allowedRoles={['admin','director']}><Allocate /></ProtectedRoute>} />
+        <Route path="/leads/import" element={<ProtectedRoute allowedRoles={['admin']}><CSVUpload /></ProtectedRoute>} />
 
-        {/* Admin only */}
-        <Route
-          path="/leads/import"
-          element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <CSVUpload />
-            </ProtectedRoute>
-          }
-        />
+        {/* PHASE 3 — Admin only */}
+        <Route path="/allocation-config" element={<ProtectedRoute allowedRoles={['admin']}><AllocationConfig /></ProtectedRoute>} />
 
-        {/* Fallback */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
