@@ -12,7 +12,12 @@ import AllocationConfig   from './pages/AllocationConfig';
 import DirectorDashboard  from './pages/DirectorDashboard';
 import TelecallerPanel    from './pages/TelecallerPanel';
 import OcrCapture         from './pages/OcrCapture';
-import SheetsSync         from './pages/SheetsSync';          // PHASE 7
+import SheetsSync         from './pages/SheetsSync';
+
+// PHASE 8 — PWA components
+import OfflineBanner  from './components/pwa/OfflineBanner';
+import UpdateBanner   from './components/pwa/UpdateBanner';
+import InstallPrompt  from './components/pwa/InstallPrompt';
 
 function Spinner() {
   return (
@@ -44,6 +49,11 @@ function ProtectedRoute({ children, allowedRoles }) {
 export default function App() {
   return (
     <BrowserRouter>
+      {/* ── Global PWA overlays ─────────────── */}
+      <OfflineBanner />
+      <UpdateBanner />
+      <InstallPrompt />
+
       <Routes>
         <Route path="/login" element={<Login />} />
 

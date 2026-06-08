@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#2563EB"/>
+  <!-- Lightning bolt - allocation engine symbol -->
+  <path d="M296 80L160 280h128l-48 152 176-232H288L296 80z" fill="white" opacity="0.95"/>
+</svg>

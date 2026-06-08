@@ -5,6 +5,8 @@ import ImageDropZone from '../components/ocr/ImageDropZone';
 import OcrProgressBar from '../components/ocr/OcrProgressBar';
 import ImportPreviewModal from '../components/ocr/ImportPreviewModal';
 import toast from 'react-hot-toast';
+import { getSharedImage } from '../utils/registerSW';
+import { useLocation } from 'react-router-dom';
 
 // ── States ────────────────────────────────────────────────────
 // idle → loading → extracted → (modal open) → done
@@ -67,6 +69,22 @@ function RawTextPanel({ text }) {
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function OcrCapture() {
+  const location = useLocation();
+
+  // Web Share Target — pick up image shared from phone gallery / WhatsApp
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('shared') === '1') {
+      getSharedImage().then((file) => {
+        if (file) {
+          toast.success('Image received from share!');
+          addFiles([file]);
+        }
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [queue,         setQueue]         = useState([]);      // { id, file, preview, status, progress, leadsFound, rawText, leads }
   const [stage,         setStage]         = useState(STAGE.IDLE);
   const [ocrProgress,   setOcrProgress]   = useState(0);

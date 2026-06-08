@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { LEAD_STATUSES, STATUS_BAR_COLORS, STATUS_BADGE_CLASSES } from '../constants/leadConstants';
+import PwaStatusCard from '../components/pwa/PwaStatusCard'; // PHASE 8
 
 // ── StatCard ──────────────────────────────────────────────────
 function StatCard({ label, value, color = 'text-gray-900', sub, icon }) {
@@ -18,6 +19,12 @@ function StatCard({ label, value, color = 'text-gray-900', sub, icon }) {
         <p className={`text-2xl font-bold mt-0.5 ${color}`}>{value ?? '—'}</p>
         {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
       </div>
+      {/* PWA status — Admin only */}
+      {user?.role === 'admin' && (
+        <div className="mt-5">
+          <PwaStatusCard />
+        </div>
+      )}
     </div>
   );
 }

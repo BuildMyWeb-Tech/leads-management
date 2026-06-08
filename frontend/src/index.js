@@ -4,6 +4,11 @@ import './index.css';
 import App from './App';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
+import { registerServiceWorker, requestPersistentStorage } from './utils/registerSW';
+
+// ── PWA setup ──────────────────────────────────────────────
+registerServiceWorker();
+requestPersistentStorage();
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
