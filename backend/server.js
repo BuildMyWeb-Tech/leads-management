@@ -9,7 +9,7 @@ connectDB();
 const app = express();
 
 app.use(cors({ origin: '*' }));
-app.use(express.json({ limit: '2mb' }));   // service account JSON can be ~2KB
+app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use('/api/auth',        require('./routes/auth'));
@@ -19,11 +19,18 @@ app.use('/api/allocation',  require('./routes/allocation'));
 app.use('/api/director',    require('./routes/director'));
 app.use('/api/telecaller',  require('./routes/telecaller'));
 app.use('/api/ocr',         require('./routes/ocr'));
-app.use('/api/sheets',      require('./routes/sheets'));      // PHASE 7
+app.use('/api/sheets',      require('./routes/sheets'));
+app.use('/api/push',        require('./routes/push'));        // PHASE 9
 
 app.get('/api/health', (_req, res) =>
-  res.json({ status: 'OK', message: 'Lead Management API — Phase 7' })
+  res.json({ status: 'OK', message: 'Lead Management API — Phase 9' })
 );
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+
+  // PHASE 9 — Start follow-up reminder scheduler
+  const { startReminderScheduler } = require('./utils/reminderScheduler');
+  startReminderScheduler();
+});

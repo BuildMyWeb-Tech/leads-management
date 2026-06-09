@@ -1,7 +1,8 @@
 const Lead = require('../models/Lead');
 const XLSX = require('xlsx');
 const { pickNextDirector } = require('../utils/allocationEngine');
-const syncToSheets = require('../utils/syncToSheets');   // PHASE 7
+const syncToSheets = require('../utils/syncToSheets');
+const { notify }   = require('../utils/pushService');       // PHASE 9
 
 const LEAD_STATUSES = [
   'New','Allocated','Called','Follow Up',
@@ -51,21 +52,30 @@ const getLeads = async (req, res) => {
 const createLead = async (req, res) => {
   try {
     const leadData = { ...req.body };
+    const prevDirectorId = null; // no previous director on create
+
     if (!leadData.assignedDirector) {
       try {
         const pick = await pickNextDirector();
         if (pick) { leadData.assignedDirector = pick.directorId; leadData.status = 'Allocated'; }
       } catch (e) { console.warn('Auto-allocation skipped:', e.message); }
     }
+
     const lead = await Lead.create(leadData);
     const populated = await Lead.findById(lead._id)
       .populate('assignedDirector',   'name email')
       .populate('assignedTelecaller', 'name email');
 
-    // PHASE 7 — sync to Sheets (non-fatal, runs after response)
-    syncToSheets(populated, 'create');
-
     res.status(201).json(populated);
+
+    // Post-response: Sheets + notifications (non-fatal)
+    syncToSheets(populated, 'create');
+    if (populated.assignedDirector) {
+      notify.leadAllocatedToDirector(populated.assignedDirector._id, populated.name);
+    }
+    if (populated.assignedTelecaller) {
+      notify.leadAssignedToTelecaller(populated.assignedTelecaller._id, populated.name);
+    }
   } catch (err) { res.status(400).json({ message: err.message }); }
 };
 
@@ -86,6 +96,11 @@ const updateLead = async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
+
+    // Capture before-state for notification comparison
+    const prevTelecaller = lead.assignedTelecaller?.toString();
+    const prevDirector   = lead.assignedDirector?.toString();
+    const prevStatus     = lead.status;
 
     if (req.user.role === 'telecaller') {
       if (req.body.status !== undefined) {
@@ -121,10 +136,21 @@ const updateLead = async (req, res) => {
       .populate('assignedTelecaller', 'name email')
       .populate('callHistory.updatedBy', 'name');
 
-    // PHASE 7 — sync update to Sheets (non-fatal)
+    res.json(updated);
+
+    // Post-response: non-fatal side-effects
     syncToSheets(updated, 'update');
 
-    res.json(updated);
+    // Notify telecaller if newly assigned
+    const newTelecaller = updated.assignedTelecaller?._id?.toString();
+    if (newTelecaller && newTelecaller !== prevTelecaller) {
+      notify.leadAssignedToTelecaller(updated.assignedTelecaller._id, updated.name);
+    }
+
+    // Notify director on status change (if they opted in)
+    if (updated.assignedDirector && updated.status !== prevStatus) {
+      notify.statusChanged(updated.assignedDirector._id, updated.name, prevStatus, updated.status);
+    }
   } catch (err) { res.status(400).json({ message: err.message }); }
 };
 
@@ -142,14 +168,32 @@ const bulkAssign = async (req, res) => {
   try {
     const { leadIds, assignedDirector, assignedTelecaller } = req.body;
     if (!leadIds?.length) return res.status(400).json({ message: 'leadIds required' });
+
     const update = {};
     if (assignedDirector   !== undefined) update.assignedDirector   = assignedDirector   || null;
     if (assignedTelecaller !== undefined) update.assignedTelecaller = assignedTelecaller || null;
+
     const result = await Lead.updateMany({ _id: { $in: leadIds } }, { $set: update });
+
     if (assignedDirector) {
       await Lead.updateMany({ _id: { $in: leadIds }, status: 'New' }, { $set: { status: 'Allocated' } });
     }
+
     res.json({ message: `${result.modifiedCount} lead(s) updated`, modifiedCount: result.modifiedCount });
+
+    // Notify after response
+    if (assignedDirector) {
+      // Get lead names for notification
+      const leads = await Lead.find({ _id: { $in: leadIds } }).select('name').lean();
+      const firstName = leads[0]?.name || 'leads';
+      notify.leadAllocatedToDirector(assignedDirector, firstName, leads.length);
+    }
+    if (assignedTelecaller) {
+      const leads = await Lead.find({ _id: { $in: leadIds } }).select('name').lean();
+      for (const l of leads) {
+        notify.leadAssignedToTelecaller(assignedTelecaller, l.name);
+      }
+    }
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
