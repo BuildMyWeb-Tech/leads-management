@@ -1,11 +1,9 @@
 const Lead = require('../models/Lead');
 const { pickNextDirector } = require('../utils/allocationEngine');
+const audit = require('../utils/auditService');   // FIXED: was missing, caused ERR_HTTP_HEADERS_SENT
 
 /**
  * POST /api/ocr/check-duplicates
- * Body: { phones: ['9999999999', ...] }
- * Returns which phones already exist in the DB.
- * Used by the frontend OCR preview modal before importing.
  */
 const checkDuplicates = async (req, res) => {
   try {
@@ -14,21 +12,15 @@ const checkDuplicates = async (req, res) => {
       return res.status(400).json({ message: 'phones array is required' });
     }
 
-    // Normalise: strip spaces, dashes, country code (+91 / 0)
     const normalise = (p) =>
-      String(p)
-        .replace(/\s|-|\(|\)/g, '')
-        .replace(/^(\+91|91|0)/, '')
-        .slice(-10);
+      String(p).replace(/\s|-|\(|\)/g, '').replace(/^(\+91|91|0)/, '').slice(-10);
 
     const normalised = phones.map(normalise);
 
-    // Regex-based search to handle slight formatting differences in DB
     const existing = await Lead.find({
       phone: { $in: normalised.map((p) => new RegExp(p + '$')) },
     }).select('name phone status assignedDirector').populate('assignedDirector', 'name');
 
-    // Build a lookup map: normalised phone → existing lead
     const dupMap = {};
     existing.forEach((lead) => {
       const norm = normalise(lead.phone);
@@ -40,14 +32,13 @@ const checkDuplicates = async (req, res) => {
       };
     });
 
-    // Return per-phone result
     const results = phones.map((rawPhone) => {
       const norm = normalise(rawPhone);
       return {
-        phone:     rawPhone,
-        normalised: norm,
+        phone:       rawPhone,
+        normalised:  norm,
         isDuplicate: !!dupMap[norm],
-        existing:   dupMap[norm] || null,
+        existing:    dupMap[norm] || null,
       };
     });
 
@@ -59,10 +50,6 @@ const checkDuplicates = async (req, res) => {
 
 /**
  * POST /api/ocr/import
- * Body: { leads: [{ name, phone, source?, notes? }] }
- * Skips duplicates (phones already in DB).
- * Auto-allocates via allocation engine.
- * Returns imported count + skipped list.
  */
 const importOcrLeads = async (req, res) => {
   try {
@@ -72,22 +59,17 @@ const importOcrLeads = async (req, res) => {
     }
 
     const normalise = (p) =>
-      String(p)
-        .replace(/\s|-|\(|\)/g, '')
-        .replace(/^(\+91|91|0)/, '')
-        .slice(-10);
+      String(p).replace(/\s|-|\(|\)/g, '').replace(/^(\+91|91|0)/, '').slice(-10);
 
-    // Deduplicate within the incoming batch first
-    const seen    = new Set();
-    const unique  = [];
+    const seen   = new Set();
+    const unique = [];
     for (const lead of leads) {
       const norm = normalise(lead.phone);
       if (!seen.has(norm)) { seen.add(norm); unique.push({ ...lead, _norm: norm }); }
     }
 
-    // Check against DB
-    const norms      = unique.map((l) => l._norm);
-    const existing   = await Lead.find({
+    const norms       = unique.map((l) => l._norm);
+    const existing    = await Lead.find({
       phone: { $in: norms.map((p) => new RegExp(p + '$')) },
     }).select('phone');
     const existingSet = new Set(existing.map((l) => normalise(l.phone)));
@@ -100,24 +82,17 @@ const importOcrLeads = async (req, res) => {
         skipped.push({ phone: lead.phone, name: lead.name, reason: 'duplicate' });
         continue;
       }
-
       const leadData = {
-        name:   lead.name  || 'Unknown',
-        phone:  lead._norm,        // store normalised 10-digit
+        name:   lead.name   || 'Unknown',
+        phone:  lead._norm,
         source: lead.source || 'Other',
         notes:  lead.notes  || '',
         status: 'New',
       };
-
-      // Auto-allocation
       try {
         const pick = await pickNextDirector();
-        if (pick) {
-          leadData.assignedDirector = pick.directorId;
-          leadData.status = 'Allocated';
-        }
+        if (pick) { leadData.assignedDirector = pick.directorId; leadData.status = 'Allocated'; }
       } catch (_) {}
-
       toInsert.push(leadData);
     }
 
@@ -125,14 +100,21 @@ const importOcrLeads = async (req, res) => {
       ? await Lead.insertMany(toInsert, { ordered: false })
       : [];
 
+    // FIXED: send response FIRST, then fire non-fatal audit (prevents ERR_HTTP_HEADERS_SENT)
     res.json({
       message:  `${inserted.length} lead(s) imported, ${skipped.length} skipped`,
       imported: inserted.length,
       skipped,
     });
-    audit.leadImportedOCR(req, inserted.length, skipped.length);
+
+    // Non-fatal audit — called AFTER response is sent
+    try { audit.leadImportedOCR(req, inserted.length, skipped.length); } catch (_) {}
+
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    // Guard: only send error if headers not already sent
+    if (!res.headersSent) {
+      res.status(500).json({ message: err.message });
+    }
   }
 };
 

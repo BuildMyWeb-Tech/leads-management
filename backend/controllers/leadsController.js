@@ -83,7 +83,7 @@ const getLead = async (req, res) => {
     const lead = await Lead.findById(req.params.id)
       .populate('assignedDirector',   'name email')
       .populate('assignedTelecaller', 'name email')
-      .populate('callHistory.updatedBy', 'name');
+      .populate({ path: 'callHistory.updatedBy', select: 'name', strictPopulate: false });
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
     res.json(lead);
   } catch (err) { res.status(500).json({ message: err.message }); }
@@ -108,6 +108,7 @@ const updateLead = async (req, res) => {
       if (req.body.notes        !== undefined) lead.notes        = req.body.notes;
       if (req.body.followUpDate !== undefined) lead.followUpDate = req.body.followUpDate || null;
       if (req.body.status !== undefined || req.body.notes !== undefined) {
+        if (!lead.callHistory) lead.callHistory = [];
         lead.callHistory.push({ status: lead.status, notes: req.body.notes || lead.notes || '', updatedBy: req.user._id, updatedAt: new Date() });
       }
       await lead.save();
@@ -125,7 +126,7 @@ const updateLead = async (req, res) => {
     const updated = await Lead.findById(lead._id)
       .populate('assignedDirector',   'name email')
       .populate('assignedTelecaller', 'name email')
-      .populate('callHistory.updatedBy', 'name');
+      .populate({ path: 'callHistory.updatedBy', select: 'name', strictPopulate: false });
 
     res.json(updated);
 
