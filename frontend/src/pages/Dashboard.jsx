@@ -6,7 +6,7 @@ import { LEAD_STATUSES, STATUS_BAR_COLORS, STATUS_BADGE_CLASSES } from '../const
 import PwaStatusCard from '../components/pwa/PwaStatusCard'; // PHASE 8
 
 // ── StatCard ──────────────────────────────────────────────────
-function StatCard({ label, value, color = 'text-gray-900', sub, icon }) {
+function StatCard({ label, value, color = 'text-gray-900', sub, icon, user}) {
   return (
     <div className="card flex items-start gap-3">
       {icon && (

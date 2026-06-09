@@ -7,6 +7,7 @@ import ImportPreviewModal from '../components/ocr/ImportPreviewModal';
 import toast from 'react-hot-toast';
 import { getSharedImage } from '../utils/registerSW';
 import { useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 
 // ── States ────────────────────────────────────────────────────
 // idle → loading → extracted → (modal open) → done
@@ -73,17 +74,17 @@ export default function OcrCapture() {
 
   // Web Share Target — pick up image shared from phone gallery / WhatsApp
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    if (params.get('shared') === '1') {
-      getSharedImage().then((file) => {
-        if (file) {
-          toast.success('Image received from share!');
-          addFiles([file]);
-        }
-      });
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const params = new URLSearchParams(location.search);
+
+  if (params.get('shared') === '1') {
+    getSharedImage().then((file) => {
+      if (file) {
+        toast.success('Image received from share!');
+        addFiles([file]);
+      }
+    });
+  }
+}, []);
 
   const [queue,         setQueue]         = useState([]);      // { id, file, preview, status, progress, leadsFound, rawText, leads }
   const [stage,         setStage]         = useState(STAGE.IDLE);
