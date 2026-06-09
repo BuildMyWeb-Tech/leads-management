@@ -1,4 +1,5 @@
 const AllocationConfig = require('../models/AllocationConfig');
+const audit = require('../utils/auditService');  // PHASE 10
 const Lead = require('../models/Lead');
 const User = require('../models/User');
 const { pickNextDirector, previewSequence } = require('../utils/allocationEngine');
@@ -73,6 +74,7 @@ const saveConfig = async (req, res) => {
       .populate('ratios.director', 'name email isActive');
 
     res.json(populated);
+    audit.allocationConfigChanged(req, ratios);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -175,6 +177,7 @@ const runAllocation = async (req, res) => {
       allocated: results.length,
       summary,
     });
+    audit.allocationRun(req, results.length, summary);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

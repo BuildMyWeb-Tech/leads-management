@@ -20,17 +20,16 @@ app.use('/api/director',    require('./routes/director'));
 app.use('/api/telecaller',  require('./routes/telecaller'));
 app.use('/api/ocr',         require('./routes/ocr'));
 app.use('/api/sheets',      require('./routes/sheets'));
-app.use('/api/push',        require('./routes/push'));        // PHASE 9
+app.use('/api/push',        require('./routes/push'));
+app.use('/api/audit',       require('./routes/audit'));     // PHASE 10
 
 app.get('/api/health', (_req, res) =>
-  res.json({ status: 'OK', message: 'Lead Management API — Phase 9' })
+  res.json({ status: 'OK', message: 'Lead Management API — Phase 10 (Complete)' })
 );
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-
-  // PHASE 9 — Start follow-up reminder scheduler
+  console.log(`🚀 Server running on port ${PORT}`);
   const { startReminderScheduler } = require('./utils/reminderScheduler');
   startReminderScheduler();
 });

@@ -1,6 +1,7 @@
 const SheetSync  = require('../models/SheetSync');
 const Lead       = require('../models/Lead');
 const { appendRow, verifyConnection, bulkSync, COLUMN_LABELS } = require('../utils/sheetsService');
+const audit = require('../utils/auditService');  // PHASE 10
 
 // ── Helper: get or create singleton config ────────────────────
 const getConfig = async () => {
@@ -136,6 +137,7 @@ const syncAll = async (req, res) => {
       message: `${result.count} lead${result.count !== 1 ? 's' : ''} synced to Google Sheets`,
       count: result.count,
     });
+    audit.sheetsSync(req, result.count);
   } catch (err) {
     // Update failure status
     try {

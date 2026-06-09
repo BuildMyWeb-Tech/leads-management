@@ -130,6 +130,7 @@ const importOcrLeads = async (req, res) => {
       imported: inserted.length,
       skipped,
     });
+    audit.leadImportedOCR(req, inserted.length, skipped.length);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

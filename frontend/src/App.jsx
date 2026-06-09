@@ -1,25 +1,25 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 
-import Sidebar                   from './components/layout/Sidebar';
-import Login                     from './pages/Login';
-import Dashboard                 from './pages/Dashboard';
-import Leads                     from './pages/Leads';
-import AddLead                   from './pages/AddLead';
-import CSVUpload                 from './pages/CSVUpload';
-import Allocate                  from './pages/Allocate';
-import AllocationConfig          from './pages/AllocationConfig';
-import DirectorDashboard         from './pages/DirectorDashboard';
-import TelecallerPanel           from './pages/TelecallerPanel';
-import OcrCapture                from './pages/OcrCapture';
-import SheetsSync                from './pages/SheetsSync';
-import NotificationSettings      from './pages/NotificationSettings';  // PHASE 9
+import Sidebar                      from './components/layout/Sidebar';
+import Login                        from './pages/Login';
+import Dashboard                    from './pages/Dashboard';
+import Leads                        from './pages/Leads';
+import AddLead                      from './pages/AddLead';
+import CSVUpload                    from './pages/CSVUpload';
+import Allocate                     from './pages/Allocate';
+import AllocationConfig             from './pages/AllocationConfig';
+import DirectorDashboard            from './pages/DirectorDashboard';
+import TelecallerPanel              from './pages/TelecallerPanel';
+import OcrCapture                   from './pages/OcrCapture';
+import SheetsSync                   from './pages/SheetsSync';
+import NotificationSettings         from './pages/NotificationSettings';
+import AuditLogs                    from './pages/AuditLogs';           // PHASE 10
 
-// PWA overlays
-import OfflineBanner             from './components/pwa/OfflineBanner';
-import UpdateBanner              from './components/pwa/UpdateBanner';
-import InstallPrompt             from './components/pwa/InstallPrompt';
-import NotificationPermissionBanner from './components/notifications/NotificationPermissionBanner'; // PHASE 9
+import OfflineBanner                from './components/pwa/OfflineBanner';
+import UpdateBanner                 from './components/pwa/UpdateBanner';
+import InstallPrompt                from './components/pwa/InstallPrompt';
+import NotificationPermissionBanner from './components/notifications/NotificationPermissionBanner';
 
 function Spinner() {
   return (
@@ -51,7 +51,6 @@ function ProtectedRoute({ children, allowedRoles }) {
 export default function App() {
   return (
     <BrowserRouter>
-      {/* Global overlays */}
       <OfflineBanner />
       <UpdateBanner />
       <InstallPrompt />
@@ -61,23 +60,24 @@ export default function App() {
         <Route path="/login" element={<Login />} />
 
         {/* All roles */}
-        <Route path="/dashboard"            element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/leads"                element={<ProtectedRoute><Leads /></ProtectedRoute>} />
-        <Route path="/notifications"        element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
+        <Route path="/dashboard"          element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/leads"              element={<ProtectedRoute><Leads /></ProtectedRoute>} />
+        <Route path="/notifications"      element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
 
         {/* Admin + Director */}
-        <Route path="/leads/add"            element={<ProtectedRoute allowedRoles={['admin','director']}><AddLead /></ProtectedRoute>} />
-        <Route path="/allocate"             element={<ProtectedRoute allowedRoles={['admin','director']}><Allocate /></ProtectedRoute>} />
-        <Route path="/director-dashboard"   element={<ProtectedRoute allowedRoles={['admin','director']}><DirectorDashboard /></ProtectedRoute>} />
-        <Route path="/ocr-capture"          element={<ProtectedRoute allowedRoles={['admin','director']}><OcrCapture /></ProtectedRoute>} />
+        <Route path="/leads/add"          element={<ProtectedRoute allowedRoles={['admin','director']}><AddLead /></ProtectedRoute>} />
+        <Route path="/allocate"           element={<ProtectedRoute allowedRoles={['admin','director']}><Allocate /></ProtectedRoute>} />
+        <Route path="/director-dashboard" element={<ProtectedRoute allowedRoles={['admin','director']}><DirectorDashboard /></ProtectedRoute>} />
+        <Route path="/ocr-capture"        element={<ProtectedRoute allowedRoles={['admin','director']}><OcrCapture /></ProtectedRoute>} />
 
         {/* Admin only */}
-        <Route path="/leads/import"         element={<ProtectedRoute allowedRoles={['admin']}><CSVUpload /></ProtectedRoute>} />
-        <Route path="/allocation-config"    element={<ProtectedRoute allowedRoles={['admin']}><AllocationConfig /></ProtectedRoute>} />
-        <Route path="/sheets-sync"          element={<ProtectedRoute allowedRoles={['admin']}><SheetsSync /></ProtectedRoute>} />
+        <Route path="/leads/import"       element={<ProtectedRoute allowedRoles={['admin']}><CSVUpload /></ProtectedRoute>} />
+        <Route path="/allocation-config"  element={<ProtectedRoute allowedRoles={['admin']}><AllocationConfig /></ProtectedRoute>} />
+        <Route path="/sheets-sync"        element={<ProtectedRoute allowedRoles={['admin']}><SheetsSync /></ProtectedRoute>} />
+        <Route path="/audit-logs"         element={<ProtectedRoute allowedRoles={['admin']}><AuditLogs /></ProtectedRoute>} />
 
         {/* Telecaller */}
-        <Route path="/my-leads"             element={<ProtectedRoute allowedRoles={['telecaller','admin']}><TelecallerPanel /></ProtectedRoute>} />
+        <Route path="/my-leads"           element={<ProtectedRoute allowedRoles={['telecaller','admin']}><TelecallerPanel /></ProtectedRoute>} />
 
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
