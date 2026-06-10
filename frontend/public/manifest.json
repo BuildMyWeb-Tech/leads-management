@@ -13,59 +13,31 @@
   "lang": "en-IN",
   "categories": ["business", "productivity"],
   "icons": [
+    { "src": "/icon-72x72.png",   "sizes": "72x72",   "type": "image/png", "purpose": "any" },
+    { "src": "/icon-96x96.png",   "sizes": "96x96",   "type": "image/png", "purpose": "any" },
+    { "src": "/icon-128x128.png", "sizes": "128x128", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-144x144.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-152x152.png", "sizes": "152x152", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-384x384.png", "sizes": "384x384", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-192x192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-512x512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
     {
-      "src": "/icon-72x72.png",
-      "sizes": "72x72",
+      "src": "/screenshot-wide.png",
+      "sizes": "1280x720",
       "type": "image/png",
-      "purpose": "any"
+      "form_factor": "wide",
+      "label": "A2S CRM Dashboard"
     },
     {
-      "src": "/icon-96x96.png",
-      "sizes": "96x96",
+      "src": "/screenshot-narrow.png",
+      "sizes": "390x844",
       "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-128x128.png",
-      "sizes": "128x128",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-144x144.png",
-      "sizes": "144x144",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-152x152.png",
-      "sizes": "152x152",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-384x384.png",
-      "sizes": "384x384",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
+      "form_factor": "narrow",
+      "label": "A2S CRM Mobile View"
     }
   ],
   "share_target": {
@@ -77,10 +49,7 @@
       "text": "text",
       "url": "url",
       "files": [
-        {
-          "name": "image",
-          "accept": ["image/png", "image/jpeg", "image/webp", "image/*"]
-        }
+        { "name": "image", "accept": ["image/png", "image/jpeg", "image/webp", "image/*"] }
       ]
     }
   },
