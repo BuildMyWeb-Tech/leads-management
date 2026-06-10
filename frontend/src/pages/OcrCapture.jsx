@@ -73,45 +73,62 @@ function RawTextPanel({ text }) {
 }
 
 export default function OcrCapture() {
-  const location = useLocation();
+const location = useLocation();
+
+const [queue, setQueue] = useState([]);
+const [stage, setStage] = useState(STAGE.IDLE);
+const [ocrProgress, setOcrProgress] = useState(0);
+const [ocrStage, setOcrStage] = useState('');
+const [allLeads, setAllLeads] = useState([]);
+const [showModal, setShowModal] = useState(false);
+const [importedCount, setImportedCount] = useState(0);
+const [currentImage, setCurrentImage] = useState(null);
+
+const multiInputRef = useRef(null);
+
+const addFiles = useCallback((files) => {
+  const arr = Array.isArray(files) ? files : [files];
+
+  const items = arr.map((f) => ({
+    id: `${Date.now()}-${Math.random()}`,
+    file: f,
+    preview: URL.createObjectURL(f),
+    status: 'pending',
+    progress: 0,
+    leadsFound: 0,
+    rawText: '',
+    leads: [],
+  }));
+
+  setQueue((prev) => [...prev, ...items]);
+}, []);
 
 useEffect(() => {
   const params = new URLSearchParams(location.search);
 
   if (params.get('shared') === '1') {
-    getSharedImage().then((file) => {
-      if (file) {
-        toast.success('Image received from share!');
-        addFiles([file]);
-      }
-    });
+    getSharedImage()
+      .then((file) => {
+        if (file) {
+          toast.success('Image received from share!');
+          addFiles([file]);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to get shared image:', err);
+      });
   }
 }, [location.search, addFiles]);
 
-  const [queue,         setQueue]         = useState([]);
-  const [stage,         setStage]         = useState(STAGE.IDLE);
-  const [ocrProgress,   setOcrProgress]   = useState(0);
-  const [ocrStage,      setOcrStage]      = useState('');
-  const [allLeads,      setAllLeads]      = useState([]);
-  const [showModal,     setShowModal]     = useState(false);
-  const [importedCount, setImportedCount] = useState(0);
-  const [currentImage,  setCurrentImage]  = useState(null);
-  const multiInputRef   = useRef(null);
-
-  const addFiles = useCallback((files) => {
-    const arr   = Array.isArray(files) ? files : [files];
-    const items = arr.map((f) => ({
-      id:         `${Date.now()}-${Math.random()}`,
-      file:       f,
-      preview:    URL.createObjectURL(f),
-      status:     'pending',
-      progress:   0,
-      leadsFound: 0,
-      rawText:    '',
-      leads:      [],
-    }));
-    setQueue((prev) => [...prev, ...items]);
-  }, []);
+useEffect(() => {
+  return () => {
+    queue.forEach((item) => {
+      if (item.preview) {
+        URL.revokeObjectURL(item.preview);
+      }
+    });
+  };
+}, [queue]);
 
   const removeFromQueue = (id) =>
     setQueue((prev) => prev.filter((i) => i.id !== id));
@@ -188,16 +205,22 @@ useEffect(() => {
     setStage(STAGE.DONE);
   };
 
-  const handleReset = () => {
-    queue.forEach((i) => URL.revokeObjectURL(i.preview));
-    setQueue([]);
-    setAllLeads([]);
-    setStage(STAGE.IDLE);
-    setOcrProgress(0);
-    setCurrentImage(null);
-    setShowModal(false);
-    setImportedCount(0);
-  };
+const handleReset = () => {
+  queue.forEach((item) => {
+    if (item.preview) {
+      URL.revokeObjectURL(item.preview);
+    }
+  });
+
+  setQueue([]);
+  setAllLeads([]);
+  setStage(STAGE.IDLE);
+  setOcrProgress(0);
+  setOcrStage('');
+  setCurrentImage(null);
+  setShowModal(false);
+  setImportedCount(0);
+};
 
   const pendingCount    = queue.filter((i) => i.status === 'pending').length;
   const doneCount       = queue.filter((i) => i.status === 'done').length;
