@@ -1,20 +1,13 @@
-import { STATUS_BADGE_CLASSES, STATUS_BAR_COLORS } from '../../constants/leadConstants';
-
 const ACTIVE_PIPELINE = [
-  'New', 'Allocated', 'Called', 'Follow Up',
-  'Site Visit Planned', 'Site Visit Done',
-  'Interested', 'Negotiation', 'Booked',
+  'New','Allocated','Called','Follow Up',
+  'Site Visit Planned','Site Visit Done',
+  'Interested','Negotiation','Booked',
 ];
-
 const COLORS = [
   '#3b82f6','#6366f1','#eab308','#f97316',
   '#8b5cf6','#7c3aed','#22c55e','#14b8a6','#10b981',
 ];
 
-/**
- * PipelineDonut — SVG donut chart for status distribution.
- * Shows active pipeline stages only (excludes dead statuses).
- */
 export default function PipelineDonut({ statusBreakdown }) {
   const activeData = ACTIVE_PIPELINE
     .map((s, i) => {
@@ -33,16 +26,15 @@ export default function PipelineDonut({ statusBreakdown }) {
     );
   }
 
-  // Build SVG arcs
   const cx = 70, cy = 70, r = 52, inner = 34;
   let startAngle = -Math.PI / 2;
   const arcs = activeData.map((d) => {
-    const angle = (d.count / total) * 2 * Math.PI;
+    const angle    = (d.count / total) * 2 * Math.PI;
     const endAngle = startAngle + angle;
-    const x1 = cx + r * Math.cos(startAngle);
-    const y1 = cy + r * Math.sin(startAngle);
-    const x2 = cx + r * Math.cos(endAngle);
-    const y2 = cy + r * Math.sin(endAngle);
+    const x1  = cx + r * Math.cos(startAngle);
+    const y1  = cy + r * Math.sin(startAngle);
+    const x2  = cx + r * Math.cos(endAngle);
+    const y2  = cy + r * Math.sin(endAngle);
     const ix1 = cx + inner * Math.cos(startAngle);
     const iy1 = cy + inner * Math.sin(startAngle);
     const ix2 = cx + inner * Math.cos(endAngle);
@@ -55,28 +47,28 @@ export default function PipelineDonut({ statusBreakdown }) {
       `A ${inner} ${inner} 0 ${large} 0 ${ix1} ${iy1}`,
       'Z',
     ].join(' ');
-    const result = { ...d, path, angle };
+    const result = { ...d, path };
     startAngle = endAngle;
     return result;
   });
 
   return (
     <div className="flex items-center gap-4">
-      {/* Donut */}
-      <svg viewBox="0 0 140 140" className="w-28 h-28 flex-shrink-0">
+      <svg viewBox="0 0 140 140" className="w-24 h-24 sm:w-28 sm:h-28 flex-shrink-0">
         {arcs.map((arc, i) => (
           <path key={i} d={arc.path} fill={arc.color} opacity="0.85" />
         ))}
-        {/* Center label */}
-        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="16" fontWeight="700" fill="#1f2937">{total}</text>
-        <text x={cx} y={cy + 10} textAnchor="middle" fontSize="8" fill="#9ca3af">ACTIVE</text>
+        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="16"
+          fontWeight="700" fill="#1f2937">{total}</text>
+        <text x={cx} y={cy + 10} textAnchor="middle" fontSize="8" fill="#9ca3af">
+          ACTIVE
+        </text>
       </svg>
-
-      {/* Legend */}
       <div className="flex-1 space-y-1.5">
         {arcs.slice(0, 6).map((arc, i) => (
           <div key={i} className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: arc.color }} />
+            <span className="w-2 h-2 rounded-full flex-shrink-0"
+              style={{ backgroundColor: arc.color }} />
             <span className="text-xs text-gray-600 flex-1 truncate">{arc.label}</span>
             <span className="text-xs font-semibold text-gray-700">{arc.count}</span>
           </div>

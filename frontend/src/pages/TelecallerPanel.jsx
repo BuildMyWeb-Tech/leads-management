@@ -1,23 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
-import { ALLOWED_STATUS_TRANSITIONS, STATUS_BADGE_CLASSES, STATUS_BAR_COLORS } from '../constants/leadConstants';
+import { STATUS_BADGE_CLASSES, STATUS_BAR_COLORS } from '../constants/leadConstants';
 import StatusEditor from '../components/leads/StatusEditor';
 import LeadDetailDrawer from '../components/leads/LeadDetailDrawer';
+import LeadCard from '../components/telecaller/LeadCard';
 import toast from 'react-hot-toast';
 
-// ── KPI strip ─────────────────────────────────────────────────
 function KpiStrip({ kpis }) {
   const items = [
-    { label: 'My leads',     value: kpis.totalLeads,     color: 'text-gray-900' },
-    { label: 'Today',        value: kpis.todayFollowUps, color: 'text-blue-600',    sub: 'follow-ups' },
-    { label: 'Overdue',      value: kpis.overdueFollowUps, color: kpis.overdueFollowUps > 0 ? 'text-red-500' : 'text-green-600' },
-    { label: 'Interested',   value: kpis.interested,     color: 'text-green-600' },
-    { label: 'Booked',       value: kpis.booked,         color: 'text-emerald-600' },
-    { label: 'Conv%',        value: `${kpis.convRate}%`, color: 'text-blue-700' },
+    { label: 'My leads',  value: kpis.totalLeads,      color: 'text-gray-900' },
+    { label: 'Today',     value: kpis.todayFollowUps,  color: 'text-blue-600',   sub: 'follow-ups' },
+    { label: 'Overdue',   value: kpis.overdueFollowUps,
+      color: kpis.overdueFollowUps > 0 ? 'text-red-500' : 'text-green-600' },
+    { label: 'Interested',value: kpis.interested,      color: 'text-green-600' },
+    { label: 'Booked',    value: kpis.booked,          color: 'text-emerald-600' },
+    { label: 'Conv%',     value: `${kpis.convRate}%`,  color: 'text-blue-700' },
   ];
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-5">
+    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4">
       {items.map((item) => (
         <div key={item.label} className="card p-3 text-center">
           <p className={`text-xl font-bold leading-none ${item.color}`}>{item.value ?? '—'}</p>
@@ -29,104 +30,6 @@ function KpiStrip({ kpis }) {
   );
 }
 
-// ── Lead card (mobile-first) ──────────────────────────────────
-function LeadCard({ lead, onStatusSave, onOpen }) {
-  const followUpDate = lead.followUpDate ? new Date(lead.followUpDate) : null;
-  const isOverdue    = followUpDate && followUpDate < new Date();
-  const isToday      = followUpDate && followUpDate.toDateString() === new Date().toDateString();
-  const badgeCls     = STATUS_BADGE_CLASSES[lead.status] || 'bg-gray-100 text-gray-500 ring-gray-200';
-
-  return (
-    <div
-      className={`bg-white rounded-xl border transition-all ${
-        isOverdue ? 'border-red-200 shadow-sm shadow-red-50'
-        : isToday  ? 'border-orange-200 shadow-sm shadow-orange-50'
-        : 'border-gray-200 hover:border-gray-300'
-      }`}
-    >
-      {/* Card header */}
-      <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          {/* Avatar */}
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-            {lead.name.charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <p className="font-semibold text-gray-900 truncate">{lead.name}</p>
-            <a href={`tel:${lead.phone}`} className="text-xs text-blue-500 hover:underline">
-              {lead.phone}
-            </a>
-          </div>
-        </div>
-        {/* Status badge */}
-        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset flex-shrink-0 ${badgeCls}`}>
-          {lead.status}
-        </span>
-      </div>
-
-      {/* Follow-up date bar */}
-      {followUpDate && (
-        <div className={`mx-4 mb-3 px-3 py-1.5 rounded-lg flex items-center gap-2
-          ${isOverdue ? 'bg-red-50' : isToday ? 'bg-orange-50' : 'bg-blue-50'}`}>
-          <svg className={`w-3.5 h-3.5 flex-shrink-0 ${isOverdue ? 'text-red-500' : isToday ? 'text-orange-500' : 'text-blue-400'}`}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          <span className={`text-xs font-medium ${isOverdue ? 'text-red-600' : isToday ? 'text-orange-600' : 'text-blue-600'}`}>
-            {isOverdue ? '⚠ Overdue: ' : isToday ? 'Today: ' : 'Follow-up: '}
-            {followUpDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-          </span>
-        </div>
-      )}
-
-      {/* Meta row */}
-      <div className="px-4 pb-3 flex items-center gap-3 flex-wrap">
-        {lead.source && (
-          <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded">{lead.source}</span>
-        )}
-        {lead.budget && (
-          <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded">{lead.budget}</span>
-        )}
-        {lead.assignedDirector && (
-          <span className="text-xs text-gray-400">
-            Dir: <span className="text-gray-600">{lead.assignedDirector.name}</span>
-          </span>
-        )}
-        <span className="text-xs text-gray-300 ml-auto">
-          {new Date(lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-        </span>
-      </div>
-
-      {/* Notes preview */}
-      {lead.notes && (
-        <div className="mx-4 mb-3 px-3 py-2 bg-yellow-50 rounded-lg">
-          <p className="text-xs text-gray-600 italic truncate">"{lead.notes}"</p>
-        </div>
-      )}
-
-      {/* Action row */}
-      <div className="px-4 pb-4 flex items-center justify-between gap-2 border-t border-gray-50 pt-3">
-        <StatusEditor lead={lead} onSave={onStatusSave} />
-        <button
-          onClick={() => onOpen(lead)}
-          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50
-            px-2.5 py-1.5 rounded-lg transition-colors"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-          </svg>
-          View
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Upcoming follow-up item ───────────────────────────────────
 function FollowUpItem({ lead, onOpen }) {
   const followUpDate = new Date(lead.followUpDate);
   const isOverdue    = followUpDate < new Date();
@@ -136,14 +39,19 @@ function FollowUpItem({ lead, onOpen }) {
   return (
     <button
       onClick={() => onOpen(lead)}
-      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left border-b border-gray-50 last:border-0"
+      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50
+                 transition-colors text-left border-b border-gray-50 last:border-0
+                 touch-manipulation"
     >
-      <div className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center flex-shrink-0 text-center
+      <div className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center
+        flex-shrink-0 text-center
         ${isOverdue ? 'bg-red-100' : isToday ? 'bg-orange-100' : 'bg-blue-50'}`}>
-        <span className={`text-xs font-bold leading-none ${isOverdue ? 'text-red-600' : isToday ? 'text-orange-600' : 'text-blue-600'}`}>
+        <span className={`text-xs font-bold leading-none
+          ${isOverdue ? 'text-red-600' : isToday ? 'text-orange-600' : 'text-blue-600'}`}>
           {followUpDate.getDate()}
         </span>
-        <span className={`text-xs leading-none ${isOverdue ? 'text-red-400' : isToday ? 'text-orange-400' : 'text-blue-400'}`}>
+        <span className={`text-xs leading-none
+          ${isOverdue ? 'text-red-400' : isToday ? 'text-orange-400' : 'text-blue-400'}`}>
           {followUpDate.toLocaleDateString('en-IN', { month: 'short' })}
         </span>
       </div>
@@ -152,10 +60,12 @@ function FollowUpItem({ lead, onOpen }) {
         <p className="text-xs text-gray-400">{lead.phone}</p>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
-        <span className={`text-xs font-medium ${isOverdue ? 'text-red-500' : isToday ? 'text-orange-500' : 'text-blue-500'}`}>
+        <span className={`text-xs font-medium
+          ${isOverdue ? 'text-red-500' : isToday ? 'text-orange-500' : 'text-blue-500'}`}>
           {isOverdue ? 'Overdue' : isToday ? 'Today' : `${daysUntil}d`}
         </span>
-        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset hidden sm:inline-flex
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs
+          font-medium ring-1 ring-inset hidden sm:inline-flex
           ${STATUS_BADGE_CLASSES[lead.status] || ''}`}>
           {lead.status}
         </span>
@@ -164,40 +74,32 @@ function FollowUpItem({ lead, onOpen }) {
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────
 const STATUS_TABS = [
-  { label: 'All',             value: '' },
-  { label: 'Follow Up',       value: 'Follow Up' },
-  { label: 'Called',          value: 'Called' },
-  { label: 'Interested',      value: 'Interested' },
-  { label: 'Site Visit',      value: 'Site Visit Planned' },
-  { label: 'Negotiation',     value: 'Negotiation' },
+  { label: 'All',         value: '' },
+  { label: 'Follow Up',   value: 'Follow Up' },
+  { label: 'Called',      value: 'Called' },
+  { label: 'Interested',  value: 'Interested' },
+  { label: 'Site Visit',  value: 'Site Visit Planned' },
+  { label: 'Negotiation', value: 'Negotiation' },
 ];
 
 export default function TelecallerPanel() {
   const { user } = useAuth();
-
   const [kpis, setKpis]             = useState(null);
   const [leads, setLeads]           = useState([]);
   const [total, setTotal]           = useState(0);
   const [loading, setLoading]       = useState(true);
   const [kpiLoading, setKpiLoading] = useState(true);
-
   const [statusTab, setStatusTab]   = useState('');
   const [search, setSearch]         = useState('');
-  const [view, setView]             = useState('cards'); // cards | table
+  const [view, setView]             = useState('cards');
   const [page, setPage]             = useState(1);
   const [pages, setPages]           = useState(1);
-  const LIMIT = 20;
-
-  // Right panel: overview | followups
   const [rightTab, setRightTab]     = useState('overview');
   const [dashData, setDashData]     = useState(null);
-
-  // Drawer
   const [drawerLead, setDrawerLead] = useState(null);
+  const LIMIT = 20;
 
-  // ── Fetch leads ───────────────────────────────────────────
   const fetchLeads = useCallback(async () => {
     setLoading(true);
     try {
@@ -215,37 +117,33 @@ export default function TelecallerPanel() {
     }
   }, [statusTab, search, page]);
 
-  // ── Fetch KPI dashboard ───────────────────────────────────
   const fetchDashboard = useCallback(async () => {
     setKpiLoading(true);
     try {
       const { data } = await api.get('/telecaller/dashboard');
       setKpis(data.kpis);
       setDashData(data);
-    } catch {
-      // Non-fatal — KPI strip just won't show
-    } finally {
+    } catch {} finally {
       setKpiLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
-
   useEffect(() => {
     const t = setTimeout(fetchLeads, search ? 350 : 0);
     return () => clearTimeout(t);
   }, [fetchLeads]);
-
   useEffect(() => { setPage(1); }, [statusTab, search]);
 
-  // ── Status save ───────────────────────────────────────────
   const handleStatusSave = async (leadId, { status, notes, followUpDate }) => {
     try {
-      const { data: updated } = await api.put(`/leads/${leadId}`, { status, notes, followUpDate });
+      const { data: updated } = await api.put(`/leads/${leadId}`, {
+        status, notes, followUpDate,
+      });
       setLeads((prev) => prev.map((l) => (l._id === leadId ? updated : l)));
       if (drawerLead?._id === leadId) setDrawerLead(updated);
       toast.success('Updated');
-      fetchDashboard(); // refresh KPIs
+      fetchDashboard();
     } catch {
       toast.error('Update failed');
     }
@@ -253,63 +151,62 @@ export default function TelecallerPanel() {
 
   const hasFilters = statusTab || search;
 
-  // ── Render ────────────────────────────────────────────────
   return (
     <>
       <div>
-        {/* ── Header ─────────────────────────── */}
-        <div className="flex items-center justify-between mb-5">
+        {/* ── Header ──────────────────────────────────────── */}
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="page-title">My Leads</h2>
             <p className="text-sm text-gray-400 mt-0.5">
               Welcome, <span className="font-medium text-gray-700">{user?.name}</span>
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            {/* View toggle */}
-            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-              <button
-                onClick={() => setView('cards')}
-                className={`p-2 transition-colors ${view === 'cards' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-50'}`}
-                title="Card view"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                </svg>
-              </button>
-              <button
-                onClick={() => setView('table')}
-                className={`p-2 transition-colors ${view === 'table' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-50'}`}
-                title="Table view"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                </svg>
-              </button>
-            </div>
+          {/* View toggle — visible on all sizes */}
+          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setView('cards')}
+              className={`p-2 transition-colors touch-manipulation
+                ${view === 'cards' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-50'}`}
+              title="Card view"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setView('table')}
+              className={`p-2 transition-colors touch-manipulation
+                ${view === 'table' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-50'}`}
+              title="Table view"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+            </button>
           </div>
         </div>
 
-        {/* ── KPI strip ──────────────────────── */}
+        {/* ── KPI strip ──────────────────────────────────── */}
         {kpis && !kpiLoading && <KpiStrip kpis={kpis} />}
 
-        {/* ── Two-column layout ──────────────── */}
+        {/* ── Main layout ────────────────────────────────── */}
         <div className="flex gap-5">
-
-          {/* ── Left: leads ──────────────────── */}
+          {/* ── Left: leads ──────────────────────────────── */}
           <div className="flex-1 min-w-0">
-
-            {/* Status tabs */}
-            <div className="flex gap-1 overflow-x-auto pb-1 mb-4 border-b border-gray-200">
+            {/* Status tabs — scrollable on mobile */}
+            <div className="status-tabs mb-4">
               {STATUS_TABS.map((tab) => (
                 <button
                   key={tab.value}
                   onClick={() => setStatusTab(tab.value)}
-                  className={`px-3 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors -mb-px flex-shrink-0 ${
-                    statusTab === tab.value
+                  className={`flex-shrink-0 px-3 py-2.5 text-sm font-medium border-b-2
+                    whitespace-nowrap transition-colors -mb-px touch-manipulation
+                    ${statusTab === tab.value
                       ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
+                      : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                 >
                   {tab.label}
                 </button>
@@ -332,10 +229,12 @@ export default function TelecallerPanel() {
               {search && (
                 <button
                   onClick={() => setSearch('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400
+                             hover:text-gray-600 touch-manipulation p-1"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               )}
@@ -345,19 +244,21 @@ export default function TelecallerPanel() {
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs text-gray-500">
                 <span className="font-semibold text-gray-800">{total}</span> leads
-                {statusTab && <span className="ml-1">in <span className="font-medium">{statusTab}</span></span>}
+                {statusTab && (
+                  <span className="ml-1">in <span className="font-medium">{statusTab}</span></span>
+                )}
               </p>
               {hasFilters && (
                 <button
                   onClick={() => { setStatusTab(''); setSearch(''); }}
                   className="text-xs text-blue-600 hover:underline"
                 >
-                  Clear filters
+                  Clear
                 </button>
               )}
             </div>
 
-            {/* ── Card view ─────────────────── */}
+            {/* ── Card view ────────────────────────────── */}
             {view === 'cards' && (
               <>
                 {loading ? (
@@ -378,17 +279,14 @@ export default function TelecallerPanel() {
                   </div>
                 ) : leads.length === 0 ? (
                   <div className="py-16 text-center">
-                    <svg className="w-12 h-12 text-gray-200 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    <svg className="w-12 h-12 text-gray-200 mx-auto mb-3" fill="none"
+                      viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
                     <p className="text-sm text-gray-400">
                       {hasFilters ? 'No leads match your filters.' : 'No leads assigned to you yet.'}
                     </p>
-                    {hasFilters && (
-                      <button onClick={() => { setStatusTab(''); setSearch(''); }} className="mt-2 text-xs text-blue-600 hover:underline">
-                        Clear filters
-                      </button>
-                    )}
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -396,8 +294,7 @@ export default function TelecallerPanel() {
                       <LeadCard
                         key={lead._id}
                         lead={lead}
-                        onStatusSave={handleStatusSave}
-                        onOpen={setDrawerLead}
+                        onSave={handleStatusSave}
                       />
                     ))}
                   </div>
@@ -405,7 +302,7 @@ export default function TelecallerPanel() {
               </>
             )}
 
-            {/* ── Table view ────────────────── */}
+            {/* ── Table view ─────────────────────────── */}
             {view === 'table' && (
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 {loading ? (
@@ -422,7 +319,6 @@ export default function TelecallerPanel() {
                           <th className="table-th">Status</th>
                           <th className="table-th hidden md:table-cell">Follow-up</th>
                           <th className="table-th hidden lg:table-cell">Source</th>
-                          <th className="table-th hidden lg:table-cell">Notes</th>
                           <th className="table-th w-14"></th>
                         </tr>
                       </thead>
@@ -431,16 +327,15 @@ export default function TelecallerPanel() {
                           const fu = lead.followUpDate ? new Date(lead.followUpDate) : null;
                           const fuOverdue = fu && fu < new Date();
                           return (
-                            <tr
-                              key={lead._id}
+                            <tr key={lead._id}
                               className="hover:bg-gray-50 cursor-pointer"
-                              onClick={() => setDrawerLead(lead)}
-                            >
+                              onClick={() => setDrawerLead(lead)}>
                               <td className="table-td">
                                 <p className="font-medium text-gray-800">{lead.name}</p>
                               </td>
                               <td className="table-td">
-                                <a href={`tel:${lead.phone}`} onClick={(e) => e.stopPropagation()}
+                                <a href={`tel:${lead.phone}`}
+                                  onClick={(e) => e.stopPropagation()}
                                   className="text-sm text-blue-500 hover:underline">
                                   {lead.phone}
                                 </a>
@@ -456,18 +351,20 @@ export default function TelecallerPanel() {
                                   </span>
                                 ) : <span className="text-gray-300">—</span>}
                               </td>
-                              <td className="table-td hidden lg:table-cell text-gray-500 text-xs">{lead.source}</td>
-                              <td className="table-td hidden lg:table-cell">
-                                <p className="text-xs text-gray-400 truncate max-w-xs">{lead.notes || '—'}</p>
+                              <td className="table-td hidden lg:table-cell text-gray-500 text-xs">
+                                {lead.source}
                               </td>
                               <td className="table-td" onClick={(e) => e.stopPropagation()}>
                                 <button
                                   onClick={() => setDrawerLead(lead)}
-                                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                >
-                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                  className="p-1.5 text-gray-400 hover:text-blue-600
+                                    hover:bg-blue-50 rounded transition-colors touch-manipulation">
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                   </svg>
                                 </button>
                               </td>
@@ -481,7 +378,7 @@ export default function TelecallerPanel() {
               </div>
             )}
 
-            {/* ── Pagination ─────────────────── */}
+            {/* Pagination */}
             {pages > 1 && (
               <div className="flex items-center justify-between mt-4">
                 <span className="text-xs text-gray-500">Page {page} of {pages}</span>
@@ -495,93 +392,75 @@ export default function TelecallerPanel() {
             )}
           </div>
 
-          {/* ── Right panel: overview + follow-ups ── */}
+          {/* ── Right panel — hidden on mobile/tablet ──────── */}
           <div className="hidden lg:flex flex-col w-72 flex-shrink-0 gap-4">
-
-            {/* Right tabs */}
             <div className="flex border-b border-gray-200">
               {['overview','followups'].map((t) => (
                 <button
                   key={t}
                   onClick={() => setRightTab(t)}
-                  className={`flex-1 py-2 text-xs font-medium border-b-2 transition-colors -mb-px capitalize ${
-                    rightTab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
+                  className={`flex-1 py-2 text-xs font-medium border-b-2 transition-colors -mb-px capitalize
+                    ${rightTab === t
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                 >
-                  {t === 'followups' ? `Follow-ups (${dashData?.upcomingFollowUps?.length || 0})` : 'Overview'}
+                  {t === 'followups'
+                    ? `Follow-ups (${dashData?.upcomingFollowUps?.length || 0})`
+                    : 'Overview'}
                 </button>
               ))}
             </div>
 
-            {/* Overview: status breakdown */}
             {rightTab === 'overview' && dashData && (
               <div className="card flex-1">
-                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Status breakdown</h4>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                  Status breakdown
+                </h4>
                 <div className="space-y-2">
                   {(dashData.statusBreakdown || []).map((s) => {
-                    const pct = kpis?.totalLeads > 0 ? Math.round((s.count / kpis.totalLeads) * 100) : 0;
+                    const pct = kpis?.totalLeads > 0
+                      ? Math.round((s.count / kpis.totalLeads) * 100) : 0;
                     const barColor = STATUS_BAR_COLORS[s._id] || 'bg-gray-400';
-                    const badgeCls = STATUS_BADGE_CLASSES[s._id] || 'bg-gray-100 text-gray-500 ring-gray-200';
+                    const badgeCls = STATUS_BADGE_CLASSES[s._id] ||
+                      'bg-gray-100 text-gray-500 ring-gray-200';
                     return (
                       <div key={s._id} className="flex items-center gap-2">
                         <button
                           onClick={() => setStatusTab(s._id === statusTab ? '' : s._id)}
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-                            ring-1 ring-inset w-36 truncate transition-opacity
-                            ${s._id === statusTab ? 'opacity-100 ring-2' : 'opacity-80 hover:opacity-100'} ${badgeCls}`}
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full
+                            text-xs font-medium ring-1 ring-inset w-36 truncate transition-opacity
+                            ${s._id === statusTab ? 'opacity-100 ring-2' : 'opacity-80 hover:opacity-100'}
+                            ${badgeCls}`}
                         >
                           {s._id}
                         </button>
                         <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                          <div className={`${barColor} h-1.5 rounded-full`} style={{ width: `${pct}%` }} />
+                          <div className={`${barColor} h-1.5 rounded-full`}
+                            style={{ width: `${pct}%` }} />
                         </div>
-                        <span className="text-xs font-medium text-gray-600 w-5 text-right">{s.count}</span>
+                        <span className="text-xs font-medium text-gray-600 w-5 text-right">
+                          {s.count}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
-
-                {/* Recent activity */}
-                {(dashData.recentActivity || []).length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Recent activity</h4>
-                    <div className="space-y-2">
-                      {dashData.recentActivity.map((lead) => (
-                        <button
-                          key={lead._id}
-                          onClick={() => setDrawerLead(lead)}
-                          className="w-full flex items-center gap-2 hover:bg-gray-50 rounded-lg p-1.5 transition-colors text-left"
-                        >
-                          <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 flex-shrink-0">
-                            {lead.name.charAt(0)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-gray-700 truncate">{lead.name}</p>
-                          </div>
-                          <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ring-1 ring-inset flex-shrink-0
-                            ${STATUS_BADGE_CLASSES[lead.status] || ''}`}>
-                            {lead.status}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
-            {/* Follow-ups panel */}
             {rightTab === 'followups' && (
               <div className="card flex-1 p-0 overflow-hidden">
                 {(dashData?.upcomingFollowUps || []).length === 0 ? (
                   <div className="py-12 text-center px-4">
-                    <svg className="w-10 h-10 text-green-200 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <svg className="w-10 h-10 text-green-200 mx-auto mb-2" fill="none"
+                      viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <p className="text-xs text-gray-400">No upcoming follow-ups</p>
                   </div>
                 ) : (
-                  <div className="divide-y divide-gray-50 overflow-y-auto max-h-96">
+                  <div className="divide-y divide-gray-50 overflow-y-auto max-h-96 scrollbar-thin">
                     {dashData.upcomingFollowUps.map((lead) => (
                       <FollowUpItem key={lead._id} lead={lead} onOpen={setDrawerLead} />
                     ))}
@@ -593,7 +472,6 @@ export default function TelecallerPanel() {
         </div>
       </div>
 
-      {/* ── Detail Drawer ──────────────────── */}
       {drawerLead && (
         <LeadDetailDrawer
           lead={drawerLead}

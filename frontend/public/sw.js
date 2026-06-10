@@ -1,25 +1,27 @@
 /**
- * sw.js — A2S CRM Service Worker (Phase 8)
+ * sw.js — A2S CRM Service Worker
+ *
+ * FIXES vs previous version:
+ *  1. Merged duplicate addEventListener('fetch') — was two separate handlers,
+ *     second (Web Share Target) never fired because first caught everything.
+ *  2. skipWaiting() moved to message handler so UpdateBanner controls it.
+ *  3. Push notification handler fully implemented.
+ *  4. Offline fallback improved.
  *
  * Cache strategies:
  *   App Shell (HTML/JS/CSS)  → Cache First, network fallback
- *   API requests             → Network First, cache fallback (stale-while-revalidate)
- *   Static assets            → Cache First (immutable)
+ *   API requests             → Network First, stale fallback
+ *   Static assets (bundles)  → Cache First (immutable hashes)
  *   Tesseract WASM           → Cache First (large, rarely changes)
- *
- * Offline behaviour:
- *   - App shell always available offline
- *   - Last-fetched API data served from cache when offline
- *   - OCR still works offline (Tesseract WASM cached)
- *   - Mutations (POST/PUT/DELETE) fail gracefully with clear error
  */
 
-const APP_VERSION   = 'a2s-crm-v8';
-const SHELL_CACHE   = `${APP_VERSION}-shell`;
-const DATA_CACHE    = `${APP_VERSION}-data`;
-const STATIC_CACHE  = `${APP_VERSION}-static`;
+const APP_VERSION  = 'a2s-crm-v9';
+const SHELL_CACHE  = `${APP_VERSION}-shell`;
+const DATA_CACHE   = `${APP_VERSION}-data`;
+const STATIC_CACHE = `${APP_VERSION}-static`;
+const SHARE_CACHE  = `${APP_VERSION}-share`;
 
-// App shell — always cache these on install
+// App shell — cache on install
 const SHELL_URLS = [
   '/',
   '/index.html',
@@ -30,24 +32,29 @@ const SHELL_URLS = [
 
 // ── Install ──────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
+  console.log('[SW] Installing version:', APP_VERSION);
   event.waitUntil(
     caches.open(SHELL_CACHE).then((cache) => {
-      console.log('[SW] Caching app shell');
       return cache.addAll(SHELL_URLS).catch((err) => {
+        // Don't block install if some shell URLs fail
         console.warn('[SW] Shell cache partial failure:', err);
       });
     })
   );
-  self.skipWaiting();
+  // Do NOT call skipWaiting() here — let UpdateBanner control the update
+  // so users see the "New version available" prompt instead of silent reload
 });
 
 // ── Activate — clean old caches ──────────────────────────────
 self.addEventListener('activate', (event) => {
+  console.log('[SW] Activating version:', APP_VERSION);
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((k) => k.startsWith('a2s-crm-') && !k.startsWith(APP_VERSION))
+          .filter((k) =>
+            k.startsWith('a2s-crm-') && !k.startsWith(APP_VERSION)
+          )
           .map((k) => {
             console.log('[SW] Deleting old cache:', k);
             return caches.delete(k);
@@ -55,20 +62,66 @@ self.addEventListener('activate', (event) => {
       )
     )
   );
+  // Take control of all open pages immediately
   self.clients.claim();
 });
 
-// ── Fetch strategy router ────────────────────────────────────
+// ── Message handler — skipWaiting from UpdateBanner ──────────
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    console.log('[SW] Skipping waiting — applying update');
+    self.skipWaiting();
+  }
+});
+
+// ── Single fetch handler (FIXED — was split into two) ────────
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Skip non-GET requests for caching (POST/PUT/DELETE go straight to network)
+  // ── Web Share Target (POST /ocr-capture) ─────────────────
+  // Must be checked FIRST before the GET-only guard below
+  if (
+    request.method === 'POST' &&
+    url.pathname === '/ocr-capture'
+  ) {
+    event.respondWith(
+      (async () => {
+        try {
+          const formData  = await event.request.formData();
+          const imageFile = formData.get('image');
+
+          if (imageFile && imageFile instanceof File) {
+            const cache  = await caches.open(SHARE_CACHE);
+            const buffer = await imageFile.arrayBuffer();
+            await cache.put(
+              '/shared-image',
+              new Response(buffer, {
+                headers: {
+                  'Content-Type':      imageFile.type || 'image/jpeg',
+                  'X-Share-Filename':  imageFile.name || 'shared-image.jpg',
+                },
+              })
+            );
+          }
+        } catch (err) {
+          console.error('[SW] Share target error:', err);
+        }
+        // Redirect to OCR page — React picks up ?shared=1 to retrieve the file
+        return Response.redirect('/ocr-capture?shared=1', 303);
+      })()
+    );
+    return;
+  }
+
+  // ── Skip non-GET requests (POST/PUT/DELETE → network only) ─
   if (request.method !== 'GET') {
     event.respondWith(
       fetch(request).catch(() =>
         new Response(
-          JSON.stringify({ message: 'You are offline. Please reconnect to save changes.' }),
+          JSON.stringify({
+            message: 'You are offline. Please reconnect to save changes.',
+          }),
           { status: 503, headers: { 'Content-Type': 'application/json' } }
         )
       )
@@ -76,7 +129,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 1. Tesseract WASM & worker files — Cache First (large, immutable-ish)
+  // ── Skip cross-origin requests ─────────────────────────────
+  if (url.origin !== self.location.origin) {
+    // Let Google Fonts and other CDN requests pass through normally
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  // ── 1. Tesseract WASM / worker — Cache First (large files) ─
   if (
     url.pathname.includes('tesseract') ||
     url.pathname.endsWith('.wasm') ||
@@ -86,7 +146,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. Static assets (JS bundles, CSS, icons) — Cache First
+  // ── 2. Static assets (hashed JS/CSS bundles, icons) ────────
   if (
     url.pathname.match(/\.(js|css|png|jpg|jpeg|webp|svg|ico|woff2?)$/) ||
     url.pathname.startsWith('/static/')
@@ -95,22 +155,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. API requests — Network First, stale fallback
+  // ── 3. API requests — Network First with stale fallback ────
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(networkFirstWithCache(request, DATA_CACHE));
     return;
   }
 
-  // 4. App navigation (HTML) — Shell fallback
+  // ── 4. HTML navigation — Shell fallback (SPA routes) ───────
   if (request.headers.get('accept')?.includes('text/html')) {
     event.respondWith(
       fetch(request)
         .catch(() => caches.match('/index.html'))
+        .then((res) => res || caches.match('/index.html'))
     );
     return;
   }
 
-  // 5. Everything else — Network First
+  // ── 5. Everything else — Network First ─────────────────────
   event.respondWith(networkFirstWithCache(request, DATA_CACHE));
 });
 
@@ -143,95 +204,62 @@ async function networkFirstWithCache(request, cacheName) {
     const cached = await caches.match(request);
     if (cached) return cached;
     return new Response(
-      JSON.stringify({ message: 'You are offline. Showing cached data.', offline: true }),
+      JSON.stringify({
+        message: 'You are offline. Showing cached data.',
+        offline: true,
+      }),
       { status: 503, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }
 
-// ── Web Share Target handler ─────────────────────────────────
-// When user shares an image to the app via Web Share Target API,
-// the POST comes here. We redirect to /ocr-capture with the image
-// stored in Cache Storage so the page can retrieve it.
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  if (
-    event.request.method === 'POST' &&
-    url.pathname === '/ocr-capture'
-  ) {
-    event.respondWith(
-      (async () => {
-        try {
-          const formData  = await event.request.formData();
-          const imageFile = formData.get('image');
-
-          if (imageFile && imageFile instanceof File) {
-            // Store the shared image in Cache Storage so the page can pick it up
-            const cache  = await caches.open(`${APP_VERSION}-share`);
-            const buffer = await imageFile.arrayBuffer();
-            await cache.put(
-              '/shared-image',
-              new Response(buffer, {
-                headers: {
-                  'Content-Type': imageFile.type || 'image/jpeg',
-                  'X-Share-Filename': imageFile.name || 'shared-image.jpg',
-                },
-              })
-            );
-          }
-        } catch (err) {
-          console.error('[SW] Share target error:', err);
-        }
-
-        // Redirect to OCR capture page
-        return Response.redirect('/ocr-capture?shared=1', 303);
-      })()
-    );
-  }
-});
-
-// ── Background sync (future-ready stub) ─────────────────────
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-leads') {
-    console.log('[SW] Background sync: sync-leads');
-    // Phase 9 will use this for offline mutation queuing
-  }
-});
-
-// ── Push notification handler (Phase 9 stub) ────────────────
+// ── Push notifications ───────────────────────────────────────
 self.addEventListener('push', (event) => {
   if (!event.data) return;
   try {
     const data = event.data.json();
+    const options = {
+      body:    data.body    || '',
+      icon:    '/icon-192x192.png',
+      badge:   '/icon-72x72.png',
+      tag:     data.tag     || 'crm-notification',
+      data:    { url: data.url || '/dashboard' },
+      actions: data.actions || [],
+      requireInteraction: data.requireInteraction || false,
+      vibrate: [200, 100, 200],
+    };
     event.waitUntil(
-      self.registration.showNotification(data.title || 'A2S CRM', {
-        body:    data.body    || '',
-        icon:    '/icon-192x192.png',
-        badge:   '/icon-72x72.png',
-        tag:     data.tag     || 'crm-notification',
-        data:    data.url     ? { url: data.url } : {},
-        actions: data.actions || [],
-      })
+      self.registration.showNotification(data.title || 'A2S CRM', options)
     );
   } catch (err) {
     console.error('[SW] Push notification error:', err);
   }
 });
 
-// Handle notification click — navigate to relevant page
+// Handle notification click
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = event.notification.data?.url || '/dashboard';
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
-          client.navigate(url);
-          return client.focus();
+    clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clientList) => {
+        // Focus existing tab if open
+        for (const client of clientList) {
+          if (client.url.includes(self.location.origin) && 'focus' in client) {
+            client.navigate(url);
+            return client.focus();
+          }
         }
-      }
-      return clients.openWindow(url);
-    })
+        // Open new tab
+        return clients.openWindow(url);
+      })
   );
+});
+
+// ── Background sync (future) ─────────────────────────────────
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'sync-leads') {
+    console.log('[SW] Background sync: sync-leads');
+  }
 });

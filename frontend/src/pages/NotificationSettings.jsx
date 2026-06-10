@@ -5,14 +5,13 @@ import {
   getSubscriptionState,
   subscribeToPush,
   unsubscribeFromPush,
-  getPermissionState,
 } from '../utils/pushManager';
 import toast from 'react-hot-toast';
 
-// ── Toggle row ────────────────────────────────────────────────
 function PrefToggle({ label, description, checked, onChange, disabled }) {
   return (
-    <div className={`flex items-start justify-between gap-4 py-3 border-b border-gray-50 last:border-0 ${disabled ? 'opacity-40' : ''}`}>
+    <div className={`flex items-start justify-between gap-4 py-3 border-b border-gray-50
+      last:border-0 ${disabled ? 'opacity-40' : ''}`}>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-800">{label}</p>
         <p className="text-xs text-gray-400 mt-0.5">{description}</p>
@@ -21,38 +20,38 @@ function PrefToggle({ label, description, checked, onChange, disabled }) {
         type="button"
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-          checked ? 'bg-blue-600' : 'bg-gray-200'
-        }`}
+        className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full
+          transition-colors touch-manipulation
+          ${checked ? 'bg-blue-600' : 'bg-gray-200'}`}
+        aria-checked={checked}
+        role="switch"
       >
-        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-          checked ? 'translate-x-6' : 'translate-x-1'
-        }`} />
+        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow
+          transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
       </button>
     </div>
   );
 }
 
-// ── Device card ───────────────────────────────────────────────
 function DeviceCard({ sub }) {
   const ago = sub.lastUsed
     ? Math.floor((Date.now() - new Date(sub.lastUsed)) / (1000 * 60 * 60 * 24))
     : null;
 
   const getDeviceIcon = (ua = '') => {
-    if (/android/i.test(ua)) return '📱';
-    if (/iphone|ipad/i.test(ua)) return '🍎';
-    if (/chrome/i.test(ua)) return '🌐';
-    if (/firefox/i.test(ua)) return '🦊';
+    if (/android/i.test(ua))      return '📱';
+    if (/iphone|ipad/i.test(ua))  return '🍎';
+    if (/chrome/i.test(ua))       return '🌐';
+    if (/firefox/i.test(ua))      return '🦊';
     return '💻';
   };
 
   const getDeviceName = (ua = '') => {
-    if (/android/i.test(ua)) return 'Android device';
-    if (/iphone/i.test(ua)) return 'iPhone';
-    if (/ipad/i.test(ua)) return 'iPad';
-    if (/windows/i.test(ua)) return 'Windows browser';
-    if (/macintosh/i.test(ua)) return 'Mac browser';
+    if (/android/i.test(ua))    return 'Android device';
+    if (/iphone/i.test(ua))     return 'iPhone';
+    if (/ipad/i.test(ua))       return 'iPad';
+    if (/windows/i.test(ua))    return 'Windows browser';
+    if (/macintosh/i.test(ua))  return 'Mac browser';
     return 'Browser';
   };
 
@@ -65,7 +64,9 @@ function DeviceCard({ sub }) {
         </p>
         <p className="text-xs text-gray-400 font-mono truncate">{sub.endpoint}</p>
         {sub.failCount > 0 && (
-          <p className="text-xs text-orange-500 mt-0.5">⚠ {sub.failCount} delivery failure{sub.failCount > 1 ? 's' : ''}</p>
+          <p className="text-xs text-orange-500 mt-0.5">
+            ⚠ {sub.failCount} delivery failure{sub.failCount > 1 ? 's' : ''}
+          </p>
         )}
       </div>
       <p className="text-xs text-gray-400 flex-shrink-0">
@@ -75,14 +76,13 @@ function DeviceCard({ sub }) {
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────
 export default function NotificationSettings() {
   const { user } = useAuth();
 
-  const [subState,    setSubState]    = useState(null);   // null = checking
+  const [subState,    setSubState]    = useState(null);
   const [subs,        setSubs]        = useState([]);
   const [prefs,       setPrefs]       = useState(null);
-  const [pushStatus,  setPushStatus]  = useState(null);   // admin only
+  const [pushStatus,  setPushStatus]  = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [subscribing, setSubscribing] = useState(false);
   const [testing,     setTesting]     = useState(false);
@@ -92,20 +92,16 @@ export default function NotificationSettings() {
   const fetchState = useCallback(async () => {
     setLoading(true);
     try {
-      const [stateRes, subsRes, userRes] = await Promise.all([
+      const [stateRes, subsRes] = await Promise.all([
         getSubscriptionState(),
         api.get('/push/subscriptions').catch(() => ({ data: [] })),
-        api.get('/api/auth/me').catch(() => null),
       ]);
-
       setSubState(stateRes);
       setSubs(subsRes.data || []);
 
-      // Get current prefs from user object
       if (user?.notificationPrefs) {
         setPrefs(user.notificationPrefs);
       } else {
-        // Default prefs
         setPrefs({
           leadAssigned:       true,
           telecallerAssigned: true,
@@ -160,7 +156,7 @@ export default function NotificationSettings() {
       await api.put('/push/preferences', { [key]: value });
     } catch {
       toast.error('Failed to save preference');
-      setPrefs(prefs); // rollback
+      setPrefs(prefs);
     } finally {
       setSavingPrefs(false);
     }
@@ -190,15 +186,15 @@ export default function NotificationSettings() {
     }
   };
 
-  // Permission state display config
   const permConfig = {
-    granted:     { color: 'text-green-600', bg: 'bg-green-50 border-green-100', icon: '✓', label: 'Allowed' },
-    default:     { color: 'text-orange-500', bg: 'bg-orange-50 border-orange-100', icon: '?', label: 'Not set' },
-    denied:      { color: 'text-red-600', bg: 'bg-red-50 border-red-100', icon: '✗', label: 'Blocked' },
-    unsupported: { color: 'text-gray-500', bg: 'bg-gray-50 border-gray-200', icon: '—', label: 'Not supported' },
+    granted:     { color: 'text-green-600', bg: 'bg-green-50 border-green-100',   icon: '✓', label: 'Allowed'       },
+    default:     { color: 'text-orange-500', bg: 'bg-orange-50 border-orange-100', icon: '?', label: 'Not set'       },
+    denied:      { color: 'text-red-600',   bg: 'bg-red-50 border-red-100',       icon: '✗', label: 'Blocked'       },
+    unsupported: { color: 'text-gray-500',  bg: 'bg-gray-50 border-gray-200',     icon: '—', label: 'Not supported' },
   };
-  const perm     = subState?.permission || 'default';
-  const pc       = permConfig[perm] || permConfig.default;
+
+  const perm    = subState?.permission || 'default';
+  const pc      = permConfig[perm] || permConfig.default;
   const isSubbed = subState?.subscribed;
 
   if (loading) {
@@ -214,23 +210,25 @@ export default function NotificationSettings() {
 
   return (
     <div className="max-w-2xl">
-      {/* Header */}
-      <div className="mb-6">
+      <div className="mb-5">
         <h2 className="page-title">Notification settings</h2>
         <p className="text-sm text-gray-400 mt-0.5">
-          Control which push notifications you receive on this device.
+          Control push notifications on this device.
         </p>
       </div>
 
-      <div className="space-y-5">
+      <div className="space-y-4">
 
-        {/* ── Push permission status ──────────── */}
+        {/* Permission status */}
         <div className="card">
-          <h3 className="text-sm font-semibold text-gray-800 mb-4">Push notification permission</h3>
+          <h3 className="text-sm font-semibold text-gray-800 mb-4">
+            Push notification permission
+          </h3>
 
           <div className={`flex items-center justify-between p-3 rounded-xl border mb-4 ${pc.bg}`}>
             <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${pc.color} bg-white border`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center
+                text-sm font-bold ${pc.color} bg-white border`}>
                 {pc.icon}
               </div>
               <div>
@@ -239,32 +237,32 @@ export default function NotificationSettings() {
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">
                   {perm === 'denied'
-                    ? 'Blocked in browser settings — reset via the 🔒 icon in your address bar'
+                    ? 'Blocked — reset via the 🔒 icon in your address bar'
                     : perm === 'unsupported'
                     ? 'Your browser does not support Web Push'
                     : isSubbed
-                    ? 'Notifications will be delivered to this device'
-                    : 'Click "Enable" to receive push notifications'}
+                    ? 'Notifications delivered to this device'
+                    : 'Tap "Enable" to receive push notifications'}
                 </p>
               </div>
             </div>
 
             {perm !== 'denied' && perm !== 'unsupported' && (
               isSubbed ? (
-                <button onClick={handleUnsubscribe} className="btn-secondary text-xs py-1.5">
+                <button onClick={handleUnsubscribe}
+                  className="btn-secondary text-xs py-1.5 flex-shrink-0">
                   Disable
                 </button>
               ) : (
-                <button
-                  onClick={handleSubscribe}
-                  disabled={subscribing}
-                  className="btn-primary text-xs py-1.5"
-                >
+                <button onClick={handleSubscribe} disabled={subscribing}
+                  className="btn-primary text-xs py-1.5 flex-shrink-0">
                   {subscribing ? (
                     <>
                       <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                        <circle className="opacity-25" cx="12" cy="12" r="10"
+                          stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor"
+                          d="M4 12a8 8 0 018-8v8z" />
                       </svg>
                       Enabling…
                     </>
@@ -274,17 +272,14 @@ export default function NotificationSettings() {
             )}
           </div>
 
-          {/* Test button */}
           {isSubbed && (
-            <button
-              onClick={handleTest}
-              disabled={testing}
-              className="btn-secondary w-full justify-center text-sm"
-            >
+            <button onClick={handleTest} disabled={testing}
+              className="btn-secondary w-full justify-center text-sm">
               {testing ? (
                 <>
                   <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <circle className="opacity-25" cx="12" cy="12" r="10"
+                      stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                   </svg>
                   Sending test…
@@ -292,7 +287,8 @@ export default function NotificationSettings() {
               ) : (
                 <>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                   </svg>
                   Send test notification
                 </>
@@ -301,21 +297,22 @@ export default function NotificationSettings() {
           )}
         </div>
 
-        {/* ── Notification preferences ────────── */}
+        {/* Preferences */}
         {prefs && (
           <div className="card">
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-sm font-semibold text-gray-800">What to notify me about</h3>
               {savingPrefs && (
-                <svg className="w-4 h-4 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <svg className="w-4 h-4 text-blue-400 animate-spin" fill="none"
+                  viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10"
+                    stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                 </svg>
               )}
             </div>
             <p className="text-xs text-gray-400 mb-4">Changes save instantly.</p>
 
-            {/* Role-relevant prefs */}
             {(user?.role === 'admin' || user?.role === 'director') && (
               <PrefToggle
                 label="Lead allocated to me"
@@ -359,22 +356,20 @@ export default function NotificationSettings() {
           </div>
         )}
 
-        {/* ── Subscribed devices ──────────────── */}
+        {/* Subscribed devices */}
         {subs.length > 0 && (
           <div className="card">
             <h3 className="text-sm font-semibold text-gray-800 mb-3">
               Subscribed devices ({subs.length})
             </h3>
-            {subs.map((sub, i) => (
-              <DeviceCard key={i} sub={sub} />
-            ))}
+            {subs.map((sub, i) => <DeviceCard key={i} sub={sub} />)}
             <p className="text-xs text-gray-400 mt-3">
               Subscriptions expire after 90 days of inactivity.
             </p>
           </div>
         )}
 
-        {/* ── Admin: Push system status ────────── */}
+        {/* Admin: push system status */}
         {user?.role === 'admin' && pushStatus && (
           <div className="card">
             <h3 className="text-sm font-semibold text-gray-800 mb-4">System push status</h3>
@@ -384,28 +379,32 @@ export default function NotificationSettings() {
                 <p className="text-xl font-bold text-gray-900">{pushStatus.totalSubs}</p>
                 <p className="text-xs text-gray-500 mt-0.5">Total subscriptions</p>
               </div>
-              <div className={`rounded-xl p-3 text-center ${pushStatus.configured ? 'bg-green-50' : 'bg-red-50'}`}>
-                <p className={`text-sm font-bold mt-1 ${pushStatus.configured ? 'text-green-600' : 'text-red-600'}`}>
+              <div className={`rounded-xl p-3 text-center
+                ${pushStatus.configured ? 'bg-green-50' : 'bg-red-50'}`}>
+                <p className={`text-sm font-bold mt-1
+                  ${pushStatus.configured ? 'text-green-600' : 'text-red-600'}`}>
                   {pushStatus.configured ? '✓ VAPID ready' : '✗ Not configured'}
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">Server status</p>
               </div>
             </div>
 
-            {/* Per-role breakdown */}
             {pushStatus.perRole?.length > 0 && (
               <div className="space-y-2 mb-4">
                 {pushStatus.perRole.map((r) => (
                   <div key={r._id} className="flex items-center justify-between text-sm">
                     <span className="text-gray-600 capitalize">{r._id}</span>
-                    <span className="font-medium text-gray-800">{r.count} device{r.count !== 1 ? 's' : ''}</span>
+                    <span className="font-medium text-gray-800">
+                      {r.count} device{r.count !== 1 ? 's' : ''}
+                    </span>
                   </div>
                 ))}
               </div>
             )}
 
             {!pushStatus.configured && (
-              <div className="bg-orange-50 border border-orange-100 rounded-lg p-3 text-xs text-orange-700 space-y-1">
+              <div className="bg-orange-50 border border-orange-100 rounded-lg p-3
+                              text-xs text-orange-700 space-y-1">
                 <p className="font-semibold">Setup required:</p>
                 <p>1. Run <code className="bg-orange-100 px-1 rounded">npm run generate-vapid</code> in backend/</p>
                 <p>2. Add <code className="bg-orange-100 px-1 rounded">VAPID_PUBLIC_KEY</code> and <code className="bg-orange-100 px-1 rounded">VAPID_PRIVATE_KEY</code> to your <code className="bg-orange-100 px-1 rounded">.env</code></p>
@@ -414,9 +413,10 @@ export default function NotificationSettings() {
               </div>
             )}
 
-            {/* Manual trigger */}
             <div className="pt-3 mt-3 border-t border-gray-100">
-              <p className="text-xs text-gray-500 mb-2">Reminder scheduler runs daily at 9 AM IST automatically.</p>
+              <p className="text-xs text-gray-500 mb-2">
+                Reminder scheduler runs daily at 9 AM IST automatically.
+              </p>
               <button
                 onClick={handleTriggerReminders}
                 disabled={triggeringReminders}
@@ -425,8 +425,10 @@ export default function NotificationSettings() {
                 {triggeringReminders ? (
                   <>
                     <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                      <circle className="opacity-25" cx="12" cy="12" r="10"
+                        stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor"
+                        d="M4 12a8 8 0 018-8v8z" />
                     </svg>
                     Dispatching…
                   </>

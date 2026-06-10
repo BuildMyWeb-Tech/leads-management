@@ -6,18 +6,15 @@ import toast from 'react-hot-toast';
 
 export default function Allocate() {
   const { user } = useAuth();
-
-  const [leads, setLeads] = useState([]);
-  const [directors, setDirectors] = useState([]);
+  const [leads,       setLeads]       = useState([]);
+  const [directors,   setDirectors]   = useState([]);
   const [telecallers, setTelecallers] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const [selected, setSelected] = useState(new Set());
-  const [assignDirector, setAssignDirector] = useState('');
+  const [loading,     setLoading]     = useState(true);
+  const [selected,    setSelected]    = useState(new Set());
+  const [assignDirector,   setAssignDirector]   = useState('');
   const [assignTelecaller, setAssignTelecaller] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const [showAll, setShowAll] = useState(false);
+  const [saving,   setSaving]   = useState(false);
+  const [showAll,  setShowAll]  = useState(false);
 
   const fetchLeads = async () => {
     setLoading(true);
@@ -83,7 +80,7 @@ export default function Allocate() {
     }
   };
 
-  const allChecked = selected.size > 0 && selected.size === displayLeads.length;
+  const allChecked  = selected.size > 0 && selected.size === displayLeads.length;
   const someChecked = selected.size > 0 && selected.size < displayLeads.length;
 
   return (
@@ -97,17 +94,15 @@ export default function Allocate() {
         </p>
       </div>
 
-      {/* Assignment Panel */}
-      <div className="card mb-5">
+      {/* Assignment panel */}
+      <div className="card mb-4">
         <h3 className="text-sm font-semibold text-gray-700 mb-4">Assignment Controls</h3>
-        <div className="flex flex-wrap items-end gap-4">
-
-          {/* Assign to Director — Admin only */}
+        <div className="flex flex-wrap items-end gap-3">
           {user.role === 'admin' && (
-            <div>
+            <div className="flex-1 min-w-48">
               <label className="label">Assign to Director</label>
               <select
-                className="input w-52"
+                className="input"
                 value={assignDirector}
                 onChange={(e) => setAssignDirector(e.target.value)}
               >
@@ -119,11 +114,10 @@ export default function Allocate() {
             </div>
           )}
 
-          {/* Assign to Telecaller */}
-          <div>
+          <div className="flex-1 min-w-48">
             <label className="label">Assign to Telecaller</label>
             <select
-              className="input w-52"
+              className="input"
               value={assignTelecaller}
               onChange={(e) => setAssignTelecaller(e.target.value)}
             >
@@ -134,61 +128,60 @@ export default function Allocate() {
             </select>
           </div>
 
-          <button
-            onClick={handleAssign}
-            disabled={saving || selected.size === 0}
-            className="btn-primary"
-          >
-            {saving ? (
-              <>
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                </svg>
-                Assigning...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                </svg>
-                Assign {selected.size > 0 ? `(${selected.size} selected)` : 'Selected'}
-              </>
-            )}
-          </button>
-
-          {selected.size > 0 && (
-            <button onClick={() => setSelected(new Set())} className="btn-ghost text-xs">
-              Clear selection
+          <div className="flex gap-2 items-center flex-wrap">
+            <button
+              onClick={handleAssign}
+              disabled={saving || selected.size === 0}
+              className="btn-primary"
+            >
+              {saving ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10"
+                      stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                  Assigning...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                  Assign {selected.size > 0 ? `(${selected.size})` : 'Selected'}
+                </>
+              )}
             </button>
-          )}
+            {selected.size > 0 && (
+              <button onClick={() => setSelected(new Set())} className="btn-ghost text-xs">
+                Clear
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Filter toggle */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="text-sm text-gray-600">
-            Showing{' '}
             <span className="font-medium text-gray-900">{displayLeads.length}</span>{' '}
-            {showAll
-              ? 'total'
-              : user.role === 'admin'
-              ? 'unassigned (no director)'
-              : 'unassigned (no telecaller)'}{' '}
+            {showAll ? 'total' : user.role === 'admin'
+              ? 'unassigned (no director)' : 'unassigned (no telecaller)'}{' '}
             leads
           </span>
           <button
             onClick={() => { setShowAll((v) => !v); setSelected(new Set()); }}
-            className="text-xs text-blue-600 hover:text-blue-800 underline"
+            className="text-xs text-blue-600 hover:underline touch-manipulation"
           >
             {showAll ? 'Show unassigned only' : 'Show all leads'}
           </button>
         </div>
-        <span className="text-xs text-gray-400">{leads.length} total leads loaded</span>
+        <span className="text-xs text-gray-400">{leads.length} total loaded</span>
       </div>
 
-      {/* Leads Table */}
+      {/* Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         {loading ? (
           <div className="py-12 text-center text-sm text-gray-400">Loading leads...</div>
@@ -196,10 +189,8 @@ export default function Allocate() {
           <div className="py-12 text-center text-sm text-gray-400">
             {showAll ? 'No leads found.' : 'All leads are already assigned! 🎉'}
             {!showAll && (
-              <button
-                onClick={() => setShowAll(true)}
-                className="ml-2 text-blue-600 hover:underline"
-              >
+              <button onClick={() => setShowAll(true)}
+                className="ml-2 text-blue-600 hover:underline touch-manipulation">
                 View all leads
               </button>
             )}
@@ -215,7 +206,8 @@ export default function Allocate() {
                       checked={allChecked}
                       ref={(el) => { if (el) el.indeterminate = someChecked; }}
                       onChange={toggleAll}
-                      className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                      className="w-5 h-5 rounded border-gray-300 text-blue-600 cursor-pointer
+                                 touch-manipulation"
                     />
                   </th>
                   <th className="table-th">Name</th>
@@ -233,9 +225,8 @@ export default function Allocate() {
                     <tr
                       key={lead._id}
                       onClick={() => toggleSelect(lead._id)}
-                      className={`cursor-pointer transition-colors ${
-                        isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
-                      }`}
+                      className={`cursor-pointer transition-colors touch-manipulation
+                        ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                     >
                       <td className="table-td">
                         <input
@@ -243,7 +234,8 @@ export default function Allocate() {
                           checked={isSelected}
                           onChange={() => {}}
                           onClick={(e) => e.stopPropagation()}
-                          className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                          className="w-5 h-5 rounded border-gray-300 text-blue-600
+                                     cursor-pointer touch-manipulation"
                         />
                       </td>
                       <td className="table-td">
@@ -260,18 +252,14 @@ export default function Allocate() {
                         <StatusBadge status={lead.status} />
                       </td>
                       <td className="table-td hidden lg:table-cell text-xs">
-                        {lead.assignedDirector ? (
-                          <span className="text-gray-700">{lead.assignedDirector.name}</span>
-                        ) : (
-                          <span className="text-orange-400 font-medium">Unassigned</span>
-                        )}
+                        {lead.assignedDirector
+                          ? <span className="text-gray-700">{lead.assignedDirector.name}</span>
+                          : <span className="text-orange-400 font-medium">Unassigned</span>}
                       </td>
                       <td className="table-td hidden lg:table-cell text-xs">
-                        {lead.assignedTelecaller ? (
-                          <span className="text-gray-700">{lead.assignedTelecaller.name}</span>
-                        ) : (
-                          <span className="text-orange-400 font-medium">Unassigned</span>
-                        )}
+                        {lead.assignedTelecaller
+                          ? <span className="text-gray-700">{lead.assignedTelecaller.name}</span>
+                          : <span className="text-orange-400 font-medium">Unassigned</span>}
                       </td>
                     </tr>
                   );

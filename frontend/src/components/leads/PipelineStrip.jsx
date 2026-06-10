@@ -1,26 +1,14 @@
 import { STATUS_CONFIG, STATUS_BADGE_CLASSES } from '../../constants/leadConstants';
 
-// Ordered pipeline stages (excludes dead-end statuses shown separately)
 const PIPELINE_STAGES = [
-  'New',
-  'Allocated',
-  'Called',
-  'Follow Up',
-  'Site Visit Planned',
-  'Site Visit Done',
-  'Interested',
-  'Negotiation',
-  'Booked',
+  'New','Allocated','Called','Follow Up',
+  'Site Visit Planned','Site Visit Done',
+  'Interested','Negotiation','Booked',
 ];
+const DEAD_STATUSES = ['Wrong Number','Not Interested','Closed'];
 
-const DEAD_STATUSES = ['Wrong Number', 'Not Interested', 'Closed'];
-
-/**
- * Visual pipeline progress strip.
- * Shows current stage highlighted; dead-end statuses shown as a pill below.
- */
 export default function PipelineStrip({ currentStatus }) {
-  const config = STATUS_CONFIG[currentStatus] || {};
+  const config = STATUS_CONFIG?.[currentStatus] || {};
   const isDead = DEAD_STATUSES.includes(currentStatus);
   const currentStage = config.stage || 0;
 
@@ -41,14 +29,13 @@ export default function PipelineStrip({ currentStatus }) {
       {PIPELINE_STAGES.map((stage, i) => {
         const stageNum = i + 1;
         const isActive = stage === currentStatus;
-        const isPast = stageNum < currentStage;
-        const isFuture = stageNum > currentStage;
+        const isPast   = stageNum < currentStage;
 
         let dotClass = '';
         let lineClass = '';
 
         if (isActive) {
-          dotClass = 'w-2.5 h-2.5 rounded-full bg-blue-600 ring-2 ring-blue-200 ring-offset-0';
+          dotClass = 'w-2.5 h-2.5 rounded-full bg-blue-600 ring-2 ring-blue-200';
         } else if (isPast) {
           dotClass = 'w-2 h-2 rounded-full bg-green-400';
         } else {

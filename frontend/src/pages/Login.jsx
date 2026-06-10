@@ -27,11 +27,10 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
+    <div className="min-h-dvh flex bg-gray-50">
 
-      {/* ── Left panel (desktop only) ─────────────────────── */}
+      {/* ── Left panel — desktop only ──────────────────────── */}
       <div className="hidden lg:flex lg:w-1/2 bg-blue-600 flex-col justify-between p-12">
-        {/* Brand */}
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 bg-white/20 rounded-lg flex items-center justify-center">
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -42,15 +41,14 @@ export default function Login() {
           <span className="text-white font-bold text-lg tracking-tight">A2S Cinemas CRM</span>
         </div>
 
-        {/* Feature list */}
         <div className="space-y-8">
           <div>
             <h2 className="text-white text-3xl font-bold leading-tight">
               Real Estate Lead<br />Management Platform
             </h2>
             <p className="text-blue-200 mt-3 text-sm leading-relaxed">
-              Capture, allocate and convert leads with a complete
-              pipeline — from OCR capture to booking.
+              Capture, allocate and convert leads with a complete pipeline —
+              from OCR capture to booking.
             </p>
           </div>
           <ul className="space-y-3">
@@ -76,8 +74,10 @@ export default function Login() {
         <p className="text-blue-300 text-xs">© 2026 A2S Cinemas. All rights reserved.</p>
       </div>
 
-      {/* ── Right panel: login form ───────────────────────── */}
-      <div className="flex-1 flex items-center justify-center px-6 py-12">
+      {/* ── Right panel: login form ─────────────────────────── */}
+      <div className="flex-1 flex items-center justify-center
+                      px-4 py-8 sm:px-8
+                      pt-safe">
         <div className="w-full max-w-sm">
 
           {/* Mobile brand */}
@@ -104,13 +104,9 @@ export default function Login() {
 
             {/* Email */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Email address
-              </label>
+              <label className="label">Email address</label>
               <input
-                className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm
-                           placeholder-gray-400 focus:outline-none focus:ring-2
-                           focus:ring-blue-500 focus:border-transparent transition"
+                className="input"
                 type="email"
                 name="email"
                 value={form.email}
@@ -124,14 +120,10 @@ export default function Login() {
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Password
-              </label>
+              <label className="label">Password</label>
               <div className="relative">
                 <input
-                  className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm
-                             placeholder-gray-400 focus:outline-none focus:ring-2
-                             focus:ring-blue-500 focus:border-transparent transition pr-10"
+                  className="input pr-10"
                   type={showPass ? 'text' : 'password'}
                   name="password"
                   value={form.password}
@@ -144,7 +136,7 @@ export default function Login() {
                   type="button"
                   onClick={() => setShowPass((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400
-                             hover:text-gray-600 transition-colors"
+                             hover:text-gray-600 transition-colors p-1 touch-manipulation"
                   tabIndex={-1}
                 >
                   {showPass ? (
@@ -174,16 +166,16 @@ export default function Login() {
               type="submit"
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60
-                         text-white font-semibold py-2.5 px-4 rounded-lg text-sm
-                         transition-colors flex items-center justify-center gap-2 mt-2"
+                         text-white font-semibold py-3 px-4 rounded-lg text-sm
+                         transition-colors flex items-center justify-center gap-2 mt-2
+                         touch-manipulation min-h-[48px]"
             >
               {loading ? (
                 <>
                   <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10"
                       stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor"
-                      d="M4 12a8 8 0 018-8v8z" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                   </svg>
                   Signing in…
                 </>
@@ -193,12 +185,10 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Contact admin note */}
           <p className="text-center text-xs text-gray-400 mt-6">
             Don't have access?{' '}
             <span className="text-gray-600 font-medium">Contact your administrator.</span>
           </p>
-
         </div>
       </div>
     </div>
