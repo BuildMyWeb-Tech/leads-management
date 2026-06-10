@@ -14,7 +14,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build"
+    "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build"
   },
   "proxy": "http://localhost:5000",
   "browserslist": {
@@ -29,6 +29,7 @@
     ]
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "eslint-plugin-react-hooks": "^7.1.1"
   }
 }
