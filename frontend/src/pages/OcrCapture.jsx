@@ -75,17 +75,18 @@ function RawTextPanel({ text }) {
 export default function OcrCapture() {
   const location = useLocation();
 
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    if (params.get('shared') === '1') {
-      getSharedImage().then((file) => {
-        if (file) {
-          toast.success('Image received from share!');
-          addFiles([file]);
-        }
-      });
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+useEffect(() => {
+  const params = new URLSearchParams(location.search);
+
+  if (params.get('shared') === '1') {
+    getSharedImage().then((file) => {
+      if (file) {
+        toast.success('Image received from share!');
+        addFiles([file]);
+      }
+    });
+  }
+}, [location.search, addFiles]);
 
   const [queue,         setQueue]         = useState([]);
   const [stage,         setStage]         = useState(STAGE.IDLE);
