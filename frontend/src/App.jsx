@@ -24,10 +24,11 @@ import NotificationPermissionBanner from './components/notifications/Notificatio
 
 function Spinner() {
   return (
-    <div className="flex items-center justify-center h-dvh bg-gray-50">
+    <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="flex flex-col items-center gap-3">
         <svg className="w-8 h-8 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <circle className="opacity-25" cx="12" cy="12" r="10"
+            stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
         </svg>
         <p className="text-sm text-gray-400">Loading...</p>
@@ -38,6 +39,8 @@ function Spinner() {
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
+
+  // ── Mobile sidebar state — lives here so hamburger button can set it ──
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   if (loading) return <Spinner />;
@@ -46,18 +49,23 @@ function ProtectedRoute({ children, allowedRoles }) {
     return <Navigate to="/dashboard" replace />;
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-gray-50">
-      {/* Sidebar handles its own mobile/desktop rendering */}
+    <div className="flex h-screen overflow-hidden bg-gray-50">
+
+      {/* Sidebar — receives open/onClose for mobile drawer */}
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      {/* Main content area */}
+      {/* Right side: header + page content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Mobile sticky header */}
-        <header className="mobile-header lg:hidden">
+
+        {/* ── Mobile sticky header (hidden on lg+) ─────────── */}
+        <header className="lg:hidden flex-shrink-0 h-14 bg-white border-b border-gray-200
+                           flex items-center justify-between px-4 z-30 relative">
+          {/* Hamburger */}
           <button
             onClick={() => setSidebarOpen(true)}
             className="w-10 h-10 flex items-center justify-center rounded-lg
-                       text-gray-600 hover:bg-gray-100 touch-manipulation"
+                       text-gray-600 hover:bg-gray-100 active:bg-gray-200
+                       transition-colors"
             aria-label="Open menu"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -69,7 +77,8 @@ function ProtectedRoute({ children, allowedRoles }) {
           {/* Brand */}
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 bg-blue-600 rounded-md flex items-center justify-center">
-              <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
@@ -77,17 +86,14 @@ function ProtectedRoute({ children, allowedRoles }) {
             <span className="text-sm font-bold text-gray-900">A2S CRM</span>
           </div>
 
-          {/* Right side — placeholder for future actions */}
+          {/* Right spacer — keeps brand centered */}
           <div className="w-10" />
         </header>
 
-        {/* Page content — offset by mobile header height */}
-        <main className="flex-1 overflow-y-auto scrollbar-thin
-                         pt-14 lg:pt-0
-                         px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
+        {/* ── Page content ─────────────────────────────────── */}
+        {/* pt-0 on desktop (no header), content fills full height */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6 bg-gray-50">
           {children}
-          {/* Bottom safe area padding for iPhone home bar */}
-          <div className="pb-safe" style={{ height: 'max(1rem, env(safe-area-inset-bottom))' }} />
         </main>
       </div>
     </div>

@@ -2,6 +2,7 @@
   "name": "A2S Cinemas Real Estate CRM",
   "short_name": "A2S CRM",
   "description": "Real estate lead capture, allocation and tracking platform",
+  "id": "/dashboard",
   "start_url": "/dashboard",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
@@ -49,12 +50,6 @@
       "purpose": "any"
     },
     {
-      "src": "/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
       "src": "/icon-384x384.png",
       "sizes": "384x384",
       "type": "image/png",
@@ -71,22 +66,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "/screenshot-wide.png",
-      "sizes": "512x288",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "Dashboard view"
-    },
-    {
-      "src": "/screenshot-narrow.png",
-      "sizes": "288x512",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Mobile leads view"
     }
   ],
   "share_target": {

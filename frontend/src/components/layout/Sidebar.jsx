@@ -46,7 +46,8 @@ const NAV_LINKS = [
     to: '/leads/add', label: 'Add Lead',
     roles: ['admin','director'],
     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+        d="M12 4v16m8-8H4" />
     </svg>,
   },
   {
@@ -111,20 +112,30 @@ const ROLE_BADGE = {
   director:   'bg-blue-100 text-blue-700',
   telecaller: 'bg-green-100 text-green-700',
 };
-const ROLE_LABEL = { admin: 'Admin', director: 'Director', telecaller: 'Telecaller' };
-const ADMIN_ONLY = ['Import CSV', 'Allocation Engine', 'Sheets Sync', 'Audit Logs'];
+const ROLE_LABEL  = { admin: 'Admin', director: 'Director', telecaller: 'Telecaller' };
+const ADMIN_ONLY  = ['Import CSV', 'Allocation Engine', 'Sheets Sync', 'Audit Logs'];
 
-export default function Sidebar({ open, onClose }) {
+/**
+ * Sidebar
+ *
+ * Props (from App.jsx / ProtectedRoute):
+ *   open     – boolean  – whether mobile drawer is open
+ *   onClose  – function – called to close the drawer
+ *
+ * Desktop (lg+): always visible, no drawer needed.
+ * Mobile (<lg):  hidden by default, slides in when open=true.
+ */
+export default function Sidebar({ open = false, onClose = () => {} }) {
   const { user, logout } = useAuth();
-  const navigate  = useNavigate();
-  const location  = useLocation();
+  const navigate         = useNavigate();
+  const location         = useLocation();
 
-  // Close drawer when route changes (mobile)
- useEffect(() => {
-  onClose?.();
-}, [location.pathname, onClose]);
+  // Close drawer when the route changes (user tapped a nav link)
+  useEffect(() => {
+    onClose();
+  }, [location.pathname]);
 
-  // Lock body scroll when mobile drawer is open
+  // Prevent body scroll while drawer is open
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden';
@@ -136,10 +147,10 @@ export default function Sidebar({ open, onClose }) {
 
   // Close on Escape
   useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onClose?.(); };
+    const handler = (e) => { if (e.key === 'Escape' && open) onClose(); };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
+  }, [open, onClose]);
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
@@ -147,11 +158,12 @@ export default function Sidebar({ open, onClose }) {
   const mainLinks    = visibleLinks.filter((l) => !ADMIN_ONLY.includes(l.label));
   const adminLinks   = visibleLinks.filter((l) =>  ADMIN_ONLY.includes(l.label));
 
+  // ── Shared nav content (same for desktop & mobile) ──────
   const NavItem = ({ link }) => (
     <NavLink
       to={link.to}
       className={({ isActive }) =>
-        `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors touch-manipulation
+        `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors
          ${isActive
            ? 'bg-blue-50 text-blue-700 font-medium'
            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -163,13 +175,16 @@ export default function Sidebar({ open, onClose }) {
     </NavLink>
   );
 
-  const SidebarContent = () => (
-    <aside className="w-56 lg:w-56 bg-white border-r border-gray-200 flex flex-col h-full">
+  const SidebarInner = () => (
+    <div className="w-56 bg-white border-r border-gray-200 flex flex-col h-full">
+
       {/* Brand header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+      <div className="flex items-center justify-between px-5 py-4
+                      border-b border-gray-100 flex-shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 bg-blue-600 rounded-md flex items-center justify-center">
-            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
@@ -179,11 +194,12 @@ export default function Sidebar({ open, onClose }) {
             <p className="text-xs text-gray-400 mt-0.5">Real Estate CRM</p>
           </div>
         </div>
-        {/* Close button — mobile only */}
+
+        {/* Close button — only visible on mobile */}
         <button
           onClick={onClose}
-          className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg
-                     text-gray-400 hover:bg-gray-100 touch-manipulation"
+          className="lg:hidden w-8 h-8 flex items-center justify-center
+                     rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
           aria-label="Close menu"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -194,7 +210,7 @@ export default function Sidebar({ open, onClose }) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto scrollbar-thin">
+      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {mainLinks.map((l) => <NavItem key={l.to} link={l} />)}
 
         {adminLinks.length > 0 && (
@@ -218,7 +234,8 @@ export default function Sidebar({ open, onClose }) {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-gray-800 truncate">{user?.name}</p>
-            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${ROLE_BADGE[user?.role] || ''}`}>
+            <span className={`text-xs px-1.5 py-0.5 rounded font-medium
+              ${ROLE_BADGE[user?.role] || ''}`}>
               {ROLE_LABEL[user?.role] || user?.role}
             </span>
           </div>
@@ -226,7 +243,7 @@ export default function Sidebar({ open, onClose }) {
         <button
           onClick={handleLogout}
           className="w-full text-left flex items-center gap-2 text-xs text-gray-400
-                     hover:text-red-500 transition-colors py-2 touch-manipulation"
+                     hover:text-red-500 transition-colors py-1"
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -235,34 +252,36 @@ export default function Sidebar({ open, onClose }) {
           Sign out
         </button>
       </div>
-    </aside>
+    </div>
   );
 
   return (
     <>
-      {/* ── Desktop: always visible ─────────────────────────── */}
+      {/* ── Desktop: always visible ──────────────────────── */}
       <div className="hidden lg:flex h-full flex-shrink-0">
-        <SidebarContent />
+        <SidebarInner />
       </div>
 
-      {/* ── Mobile: slide-in drawer ─────────────────────────── */}
-      {/* Backdrop */}
+      {/* ── Mobile: drawer + backdrop ────────────────────── */}
+
+      {/* Backdrop — only rendered when open */}
       {open && (
         <div
-          className="sidebar-backdrop"
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
       )}
 
-      {/* Drawer panel */}
+      {/* Drawer panel — slides in from left */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 transform transition-transform duration-300
-                    ease-in-out lg:hidden
-                    ${open ? 'translate-x-0' : '-translate-x-full'}`}
-        style={{ paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}
+        className={`
+          fixed inset-y-0 left-0 z-50 lg:hidden
+          transform transition-transform duration-300 ease-in-out
+          ${open ? 'translate-x-0' : '-translate-x-full'}
+        `}
       >
-        <SidebarContent />
+        <SidebarInner />
       </div>
     </>
   );
