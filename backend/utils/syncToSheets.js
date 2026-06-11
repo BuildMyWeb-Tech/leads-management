@@ -1,40 +1,43 @@
 /**
- * syncToSheets.js — Non-fatal Sheets append called after MongoDB save.
+ * syncToSheets.js — Non-fatal Sheets upsert called after MongoDB save.
  *
- * Pattern used in leadsController:
- *   await Lead.save();         // MongoDB FIRST — always succeeds or throws
- *   syncToSheets(lead, 'create'); // Sheets SECOND — never throws to caller
+ * On create: inserts a new row (one row per lead)
+ * On update: finds existing row by leadId and updates it in place
  *
- * On failure: row is pushed to retryQueue for later retry.
+ * totalSynced = number of UNIQUE leads in sheet (increments only on new insert)
  */
 
 const SheetSync = require('../models/SheetSync');
-const { appendRow } = require('./sheetsService');
+const { upsertRow, buildRow } = require('./sheetsService');
 
 const syncToSheets = async (populatedLead, trigger = 'create') => {
   try {
     const cfg = await SheetSync.findOne();
-    if (!cfg || !cfg.isActive) return;
+    if (!cfg) return;
     if (trigger === 'create' && !cfg.syncOnCreate) return;
     if (trigger === 'update' && !cfg.syncOnUpdate) return;
     if (!cfg.spreadsheetId || !cfg.serviceAccountJson) return;
 
-    const result = await appendRow(cfg, populatedLead);
+    // isActive check — still respect it for auto-sync
+    if (!cfg.isActive) return;
+
+    const result = await upsertRow(cfg, populatedLead);
 
     if (result.success) {
-      cfg.totalSynced    = (cfg.totalSynced || 0) + 1;
+      // Only count unique leads (increment on first insert, not on updates)
+      if (result.action === 'inserted') {
+        cfg.totalSynced = (cfg.totalSynced || 0) + 1;
+      }
       cfg.lastSyncAt     = new Date();
       cfg.lastSyncStatus = 'success';
       cfg.lastSyncError  = '';
       await cfg.save();
     }
   } catch (err) {
-    console.error('[SheetsSync] append failed:', err.message);
-    // Push to retry queue — MongoDB data is already safe
+    console.error('[SheetsSync] upsert failed:', err.message);
     try {
       const cfg = await SheetSync.findOne();
       if (cfg) {
-        const { buildRow } = require('./sheetsService');
         const rowData = buildRow(populatedLead, cfg.columnOrder);
         cfg.retryQueue.push({
           leadId:    populatedLead._id,

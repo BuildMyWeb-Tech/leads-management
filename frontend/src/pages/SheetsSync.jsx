@@ -17,6 +17,57 @@ const ALL_COLUMNS = [
   { value: 'updatedAt',        label: 'Updated Date' },
 ];
 
+// ── Extract spreadsheet ID from a full URL or raw ID ─────────
+// Works with all formats:
+//   https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit?...
+//   SPREADSHEET_ID  (already just the ID)
+const extractId = (input) => {
+  if (!input) return '';
+  const trimmed = input.trim();
+  const match   = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : trimmed;
+};
+
+// ─────────────────────────────────────────────────────────────
+
+// ── Custom confirm modal ──────────────────────────────────────
+function ConfirmModal({ open, title, message, warning,
+  confirmLabel = 'Confirm', confirmClass = 'btn-primary',
+  onConfirm, onCancel }) {
+  if (!open) return null;
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
+      <div className="fixed z-50 inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
+        <div className="h-1.5 bg-orange-400 w-full" />
+        <div className="p-6">
+          <div className="flex items-start gap-4 mb-4">
+            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+              <p className="text-sm text-gray-500 mt-1 leading-relaxed">{message}</p>
+            </div>
+          </div>
+          {warning && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 mb-5">
+              <p className="text-sm text-orange-700 font-medium">{warning}</p>
+            </div>
+          )}
+          <div className="flex gap-3 justify-end">
+            <button onClick={onCancel} className="btn-ghost">Cancel</button>
+            <button onClick={onConfirm} className={confirmClass}>{confirmLabel}</button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function SyncStatusBadge({ status }) {
   const map = {
     success: { cls: 'bg-green-100 text-green-700 ring-green-200',  dot: 'bg-green-500', label: 'Connected' },
@@ -70,20 +121,16 @@ function ColumnOrderEditor({ order, onChange }) {
               </span>
               <div className="flex gap-0.5">
                 <button onClick={() => i > 0 && move(i, i - 1)} disabled={i === 0}
-                  className="p-1 text-gray-400 hover:text-blue-600 disabled:opacity-30
-                             touch-manipulation">
+                  className="p-1 text-gray-400 hover:text-blue-600 disabled:opacity-30 touch-manipulation">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M5 15l7-7 7 7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                   </svg>
                 </button>
                 <button onClick={() => i < order.length - 1 && move(i, i + 1)}
                   disabled={i === order.length - 1}
-                  className="p-1 text-gray-400 hover:text-blue-600 disabled:opacity-30
-                             touch-manipulation">
+                  className="p-1 text-gray-400 hover:text-blue-600 disabled:opacity-30 touch-manipulation">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M19 9l-7 7-7-7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
               </div>
@@ -148,10 +195,16 @@ function SyncStats({ cfg }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
 export default function SheetsSync() {
   const [cfg,           setCfg]           = useState(null);
   const [loading,       setLoading]       = useState(true);
-  const [spreadsheetId, setSpreadsheetId] = useState('');
+
+  // The raw value the user types/pastes (may be a full URL)
+  const [spreadsheetRaw, setSpreadsheetRaw] = useState('');
+  // The extracted clean ID (shown in green below the field)
+  const [extractedId,    setExtractedId]    = useState('');
+
   const [sheetName,     setSheetName]     = useState('Leads');
   const [serviceAccJson, setServiceAccJson] = useState('');
   const [isActive,      setIsActive]      = useState(false);
@@ -164,14 +217,24 @@ export default function SheetsSync() {
   const [verifying, setVerifying] = useState(false);
   const [syncing,   setSyncing]   = useState(false);
   const [retrying,  setRetrying]  = useState(false);
-  const [showJson,  setShowJson]  = useState(false);
+  const [showJson,         setShowJson]         = useState(false);
+  const [syncConfirmOpen,  setSyncConfirmOpen]  = useState(false);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+
+  // Update extracted ID whenever user types/pastes
+  const handleSpreadsheetInput = (value) => {
+    setSpreadsheetRaw(value);
+    setExtractedId(extractId(value));
+  };
 
   const fetchConfig = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await api.get('/sheets/config');
       setCfg(data);
-      setSpreadsheetId(data.spreadsheetId || '');
+      // Show the clean ID (already extracted by backend)
+      setSpreadsheetRaw(data.spreadsheetId || '');
+      setExtractedId(data.spreadsheetId || '');
       setSheetName(data.sheetName || 'Leads');
       setIsActive(data.isActive || false);
       setSyncOnCreate(data.syncOnCreate !== false);
@@ -190,12 +253,20 @@ export default function SheetsSync() {
     setSaving(true);
     try {
       const body = {
-        spreadsheetId, sheetName, isActive,
-        syncOnCreate, syncOnUpdate, columnOrder,
+        // Always send the raw value — backend will extract the ID
+        spreadsheetId: spreadsheetRaw,
+        sheetName,
+        isActive,
+        syncOnCreate,
+        syncOnUpdate,
+        columnOrder,
       };
       if (serviceAccJson.trim()) body.serviceAccountJson = serviceAccJson.trim();
       const { data } = await api.put('/sheets/config', body);
       setCfg(data);
+      // Sync displayed value to what backend actually stored
+      setSpreadsheetRaw(data.spreadsheetId || '');
+      setExtractedId(data.spreadsheetId || '');
       setServiceAccJson('');
       toast.success('Configuration saved');
     } catch (err) {
@@ -209,7 +280,7 @@ export default function SheetsSync() {
     setVerifying(true);
     try {
       const { data } = await api.post('/sheets/verify');
-      toast.success(`Connected! "${data.spreadsheetTitle}" → "${data.sheetName}"`);
+      toast.success(`✅ Connected! "${data.spreadsheetTitle}" → Sheet: "${data.sheetName}"`);
       fetchConfig();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Connection failed');
@@ -218,8 +289,10 @@ export default function SheetsSync() {
     }
   };
 
-  const handleSyncAll = async () => {
-    if (!window.confirm('Overwrite all sheet data with current MongoDB data?')) return;
+  const handleSyncAll = () => setSyncConfirmOpen(true);
+
+  const handleSyncAllConfirmed = async () => {
+    setSyncConfirmOpen(false);
     setSyncing(true);
     try {
       const { data } = await api.post('/sheets/sync-all');
@@ -245,8 +318,10 @@ export default function SheetsSync() {
     }
   };
 
-  const handleClearQueue = async () => {
-    if (!window.confirm('Clear all failed rows from retry queue?')) return;
+  const handleClearQueue = () => setClearConfirmOpen(true);
+
+  const handleClearQueueConfirmed = async () => {
+    setClearConfirmOpen(false);
     try {
       await api.delete('/sheets/retry-queue');
       toast.success('Retry queue cleared');
@@ -265,8 +340,34 @@ export default function SheetsSync() {
     );
   }
 
+  const isUrlPasted = spreadsheetRaw.includes('docs.google.com');
+
   return (
     <div className="max-w-4xl">
+      {/* Sync All confirm modal */}
+      <ConfirmModal
+        open={syncConfirmOpen}
+        title="Sync all leads to Google Sheets?"
+        message="This rewrites the entire sheet with all current leads. Each lead gets exactly one row — existing rows are updated in place, not duplicated."
+        warning="⚠ The Google Sheet will be fully overwritten. Your database (MongoDB) is never affected."
+        confirmLabel="Yes, sync all leads"
+        confirmClass="btn-primary"
+        onConfirm={handleSyncAllConfirmed}
+        onCancel={() => setSyncConfirmOpen(false)}
+      />
+
+      {/* Clear queue confirm modal */}
+      <ConfirmModal
+        open={clearConfirmOpen}
+        title="Clear the retry queue?"
+        message="The failed rows will be permanently removed and will not be retried."
+        warning="⚠ Run a full sync after clearing to ensure all leads appear in the sheet."
+        confirmLabel="Clear queue"
+        confirmClass="btn-danger"
+        onConfirm={handleClearQueueConfirmed}
+        onCancel={() => setClearConfirmOpen(false)}
+      />
+
       <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
         <div>
           <h2 className="page-title">Google Sheets Sync</h2>
@@ -279,7 +380,7 @@ export default function SheetsSync() {
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
 
-        {/* Config form */}
+        {/* ── Left: Config form ────────────────── */}
         <div className="lg:col-span-3 space-y-4">
 
           {/* Auto-sync toggle */}
@@ -305,19 +406,43 @@ export default function SheetsSync() {
           <div className="card space-y-4">
             <h3 className="text-sm font-semibold text-gray-800">Spreadsheet settings</h3>
 
+            {/* Spreadsheet ID — accepts full URL or raw ID */}
             <div>
               <label className="label">
-                Spreadsheet ID <span className="text-red-400">*</span>
+                Spreadsheet ID or URL <span className="text-red-400">*</span>
               </label>
               <input
-                className="input font-mono text-sm"
-                placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
-                value={spreadsheetId}
-                onChange={(e) => setSpreadsheetId(e.target.value)}
+                className={`input font-mono text-sm ${
+                  isUrlPasted ? 'border-blue-300 bg-blue-50' : ''
+                }`}
+                placeholder="Paste the spreadsheet URL or just the ID"
+                value={spreadsheetRaw}
+                onChange={(e) => handleSpreadsheetInput(e.target.value)}
               />
-              <p className="text-xs text-gray-400 mt-1">
-                Found in the spreadsheet URL: docs.google.com/spreadsheets/d/<strong>ID</strong>/edit
-              </p>
+
+              {/* Show what was extracted when a full URL is pasted */}
+              {isUrlPasted && extractedId ? (
+                <div className="mt-1.5 flex items-center gap-2 bg-green-50 border border-green-200
+                                rounded-lg px-3 py-2">
+                  <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none"
+                    viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M5 13l4 4L19 7" />
+                  </svg>
+                  <div>
+                    <p className="text-xs text-green-700 font-medium">URL detected — ID extracted:</p>
+                    <p className="text-xs font-mono text-green-800 break-all">{extractedId}</p>
+                  </div>
+                </div>
+              ) : extractedId ? (
+                <p className="text-xs text-gray-400 mt-1">
+                  ID: <span className="font-mono text-gray-600">{extractedId}</span>
+                </p>
+              ) : (
+                <p className="text-xs text-gray-400 mt-1">
+                  You can paste the full URL — the ID will be extracted automatically.
+                </p>
+              )}
             </div>
 
             <div>
@@ -328,6 +453,9 @@ export default function SheetsSync() {
                 value={sheetName}
                 onChange={(e) => setSheetName(e.target.value)}
               />
+              <p className="text-xs text-gray-400 mt-1">
+                The tab name inside the spreadsheet. Created automatically if it doesn't exist.
+              </p>
             </div>
 
             <div>
@@ -372,20 +500,21 @@ export default function SheetsSync() {
               )}
             </div>
 
-            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3
-                            text-xs text-blue-700 space-y-1">
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700 space-y-1">
               <p className="font-semibold mb-1">Setup steps:</p>
               <p>1. Google Cloud Console → APIs & Services → Credentials</p>
               <p>2. Create a Service Account, download the JSON key file</p>
-              <p>3. Share spreadsheet → add service account email as Editor</p>
+              <p>3. Share spreadsheet → add service account email as <strong>Editor</strong></p>
               <p>4. Enable the Google Sheets API in your project</p>
-              <p>5. Paste the JSON key content below</p>
+              <p>5. Paste the full JSON key content below</p>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="label mb-0">
-                  {cfg?.hasCredentials ? 'Replace credentials (paste new JSON)' : 'Service account JSON key'}
+                  {cfg?.hasCredentials
+                    ? 'Replace credentials (paste new JSON to update)'
+                    : 'Service account JSON key'}
                 </label>
                 <button
                   onClick={() => setShowJson((v) => !v)}
@@ -398,7 +527,7 @@ export default function SheetsSync() {
                 <textarea
                   className="input font-mono text-xs"
                   rows={6}
-                  placeholder={'{\n  "type": "service_account",\n  "project_id": "...",\n  ...\n}'}
+                  placeholder={'{\n  "type": "service_account",\n  "project_id": "...",\n  "private_key": "...",\n  "client_email": "...@....iam.gserviceaccount.com",\n  ...\n}'}
                   value={serviceAccJson}
                   onChange={(e) => setServiceAccJson(e.target.value)}
                   spellCheck={false}
@@ -426,7 +555,7 @@ export default function SheetsSync() {
             </div>
           </div>
 
-          {/* Save button */}
+          {/* Save + Test */}
           <div className="flex gap-3 flex-wrap">
             <button onClick={handleSave} disabled={saving} className="btn-primary">
               {saving ? (
@@ -450,7 +579,7 @@ export default function SheetsSync() {
             </button>
             <button
               onClick={handleVerify}
-              disabled={verifying || !spreadsheetId || !cfg?.hasCredentials}
+              disabled={verifying || !extractedId || !cfg?.hasCredentials}
               className="btn-secondary"
             >
               {verifying ? (
@@ -475,9 +604,10 @@ export default function SheetsSync() {
           </div>
         </div>
 
-        {/* Right: Status + actions */}
+        {/* ── Right: Status + actions ───────────── */}
         <div className="lg:col-span-2 space-y-4">
 
+          {/* Sync stats */}
           {cfg && (
             <div className="card">
               <h3 className="text-sm font-semibold text-gray-800 mb-3">Sync statistics</h3>
@@ -491,6 +621,7 @@ export default function SheetsSync() {
             </div>
           )}
 
+          {/* Manual sync */}
           <div className="card space-y-3">
             <h3 className="text-sm font-semibold text-gray-800">Manual sync</h3>
             <p className="text-xs text-gray-400">
@@ -498,7 +629,7 @@ export default function SheetsSync() {
             </p>
             <button
               onClick={handleSyncAll}
-              disabled={syncing || !cfg?.hasCredentials || !spreadsheetId}
+              disabled={syncing || !cfg?.hasCredentials || !extractedId}
               className="btn-primary w-full justify-center"
             >
               {syncing ? (
@@ -522,6 +653,7 @@ export default function SheetsSync() {
             </button>
           </div>
 
+          {/* Retry queue */}
           {cfg && (
             <div className="card">
               <div className="flex items-center justify-between mb-3">
@@ -550,8 +682,7 @@ export default function SheetsSync() {
                   </p>
                   <div className="max-h-32 overflow-y-auto space-y-1 scrollbar-thin">
                     {cfg.retryQueue.slice(0, 5).map((item, i) => (
-                      <div key={i}
-                        className="text-xs bg-orange-50 rounded-md px-2.5 py-1.5">
+                      <div key={i} className="text-xs bg-orange-50 rounded-md px-2.5 py-1.5">
                         <span className="font-mono text-orange-600">
                           {item.rowData?.[0] || 'Unknown'}
                         </span>
@@ -559,9 +690,7 @@ export default function SheetsSync() {
                       </div>
                     ))}
                     {cfg.retryQueue.length > 5 && (
-                      <p className="text-xs text-gray-400">
-                        + {cfg.retryQueue.length - 5} more
-                      </p>
+                      <p className="text-xs text-gray-400">+ {cfg.retryQueue.length - 5} more</p>
                     )}
                   </div>
                   <div className="flex gap-2 pt-1">
@@ -577,6 +706,29 @@ export default function SheetsSync() {
               )}
             </div>
           )}
+
+          {/* Data flow info */}
+          <div className="card bg-gray-50 border-gray-200">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+              How sync works
+            </h3>
+            <div className="space-y-2 text-xs text-gray-600">
+              <div className="flex items-center gap-2">
+                <span>🗄️</span><span>Lead saved/updated in MongoDB</span>
+              </div>
+              <div className="flex justify-center text-gray-300">↓</div>
+              <div className="flex items-center gap-2">
+                <span>📋</span><span>Row appended to Google Sheet</span>
+              </div>
+              <div className="flex justify-center text-gray-300">↓</div>
+              <div className="flex items-center gap-2">
+                <span>✓</span><span>If Sheets fails → queued for retry</span>
+              </div>
+              <p className="text-gray-400 pt-2 border-t border-gray-200 mt-2">
+                MongoDB data is <strong>never</strong> affected by Sheets failures.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

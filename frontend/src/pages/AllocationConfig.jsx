@@ -2,12 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 
+// ── Sub-components ────────────────────────────────────────────
+
 function RatioRow({ ratio, index, directors, onChange, onRemove, isOnly }) {
   return (
     <div className="flex items-center gap-3 py-2.5 border-b border-gray-100 last:border-0">
-      <div className="text-gray-300 cursor-grab select-none text-sm w-4 text-center hidden sm:block">
-        ⠿
-      </div>
+      <div className="text-gray-300 cursor-grab select-none text-sm w-4 text-center">⠿</div>
 
       <select
         className="input flex-1 text-sm"
@@ -20,30 +20,27 @@ function RatioRow({ ratio, index, directors, onChange, onRemove, isOnly }) {
         ))}
       </select>
 
-      <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="flex items-center gap-1.5 flex-shrink-0">
         <button
           type="button"
           onClick={() => onChange(index, 'weight', Math.max(1, ratio.weight - 1))}
-          className="w-8 h-8 rounded-md border border-gray-200 text-gray-500
-                     hover:bg-gray-50 flex items-center justify-center text-sm font-medium
-                     touch-manipulation"
+          className="w-7 h-7 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50
+                     flex items-center justify-center text-sm font-medium"
         >−</button>
         <input
           type="number"
           min={1} max={100}
-          className="w-14 border border-gray-200 rounded-md px-2 py-1.5 text-sm text-center
+          className="w-14 border border-gray-200 rounded-md px-2 py-1 text-sm text-center
                      font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
           value={ratio.weight}
           onChange={(e) => onChange(index, 'weight',
             Math.max(1, Math.min(100, Number(e.target.value) || 1)))}
-          inputMode="numeric"
         />
         <button
           type="button"
           onClick={() => onChange(index, 'weight', Math.min(100, ratio.weight + 1))}
-          className="w-8 h-8 rounded-md border border-gray-200 text-gray-500
-                     hover:bg-gray-50 flex items-center justify-center text-sm font-medium
-                     touch-manipulation"
+          className="w-7 h-7 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50
+                     flex items-center justify-center text-sm font-medium"
         >+</button>
       </div>
 
@@ -51,9 +48,9 @@ function RatioRow({ ratio, index, directors, onChange, onRemove, isOnly }) {
         type="button"
         onClick={() => onRemove(index)}
         disabled={isOnly}
-        className="w-8 h-8 flex items-center justify-center rounded-md text-gray-300
+        className="w-7 h-7 flex items-center justify-center rounded-md text-gray-300
                    hover:text-red-500 hover:bg-red-50 disabled:opacity-30
-                   disabled:cursor-not-allowed transition-colors touch-manipulation"
+                   disabled:cursor-not-allowed transition-colors"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -71,6 +68,7 @@ function SequencePreview({ preview, loading }) {
   if (!preview) return null;
 
   const { summary, totalWeight } = preview;
+
   return (
     <div>
       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
@@ -79,10 +77,8 @@ function SequencePreview({ preview, loading }) {
 
       <div className="flex rounded-lg overflow-hidden h-8 mb-4">
         {summary.map((item, i) => {
-          const colors = [
-            'bg-blue-500','bg-indigo-500','bg-purple-500','bg-teal-500',
-            'bg-green-500','bg-amber-500','bg-orange-500','bg-pink-500',
-          ];
+          const colors = ['bg-blue-500','bg-indigo-500','bg-purple-500','bg-teal-500',
+                          'bg-green-500','bg-amber-500','bg-orange-500','bg-pink-500'];
           return (
             <div
               key={i}
@@ -113,13 +109,17 @@ function SequencePreview({ preview, loading }) {
                 {item.director}
               </span>
               <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                <div className={`h-1.5 rounded-full ${cls.replace('text-','').replace(/\S+-\d+/,'').trim()}400`}
-                  style={{ width: `${item.pct}%` }} />
+                <div
+                  className={`h-1.5 rounded-full ${
+                    cls.replace(/text-\S+/, '').replace('bg-', 'bg-').replace('-100', '-400')
+                  }`}
+                  style={{ width: `${item.pct}%` }}
+                />
               </div>
-              <span className="text-xs text-gray-600 w-24 text-right flex-shrink-0">
-                {item.from}–{item.to} ({item.weight})
+              <span className="text-xs text-gray-600 w-24 text-right">
+                {item.from}–{item.to} ({item.weight} lead{item.weight !== 1 ? 's' : ''})
               </span>
-              <span className="text-xs font-medium text-gray-500 w-8 text-right flex-shrink-0">
+              <span className="text-xs font-medium text-gray-500 w-8 text-right">
                 {item.pct}%
               </span>
             </div>
@@ -128,16 +128,22 @@ function SequencePreview({ preview, loading }) {
       </div>
 
       <p className="text-xs text-gray-400 mt-3">
-        After lead #{totalWeight} the sequence repeats.
+        After lead #{totalWeight} the sequence repeats from position 1.
       </p>
     </div>
   );
 }
 
-function RunPanel({ unallocated }) {
+// ── RunPanel — FIXED: guards result.summary with ?. and || [] ─
+function RunPanel({ unallocated, onAllocated }) {
   const [count,   setCount]   = useState('');
   const [running, setRunning] = useState(false);
   const [result,  setResult]  = useState(null);
+
+  // Reset result display when unallocated count changes
+  useEffect(() => {
+    if (unallocated > 0) setResult(null);
+  }, [unallocated]);
 
   const handleRun = async () => {
     setRunning(true);
@@ -147,6 +153,8 @@ function RunPanel({ unallocated }) {
       const { data }  = await api.post('/allocation/run', body);
       setResult(data);
       toast.success(data.message);
+      // Notify parent to refresh stats
+      onAllocated?.();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Allocation failed');
     } finally {
@@ -158,8 +166,10 @@ function RunPanel({ unallocated }) {
     <div className="card">
       <h3 className="text-sm font-semibold text-gray-800 mb-1">Run allocation</h3>
       <p className="text-xs text-gray-400 mb-4">
-        Assign unallocated leads using configured ratios.
-        <span className="ml-1 font-medium text-orange-500">{unallocated} leads waiting.</span>
+        Assign unallocated leads to directors using the configured ratios.
+        <span className="ml-1 font-medium text-orange-500">
+          {unallocated} lead{unallocated !== 1 ? 's' : ''} waiting.
+        </span>
       </p>
 
       <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -199,33 +209,49 @@ function RunPanel({ unallocated }) {
       </div>
 
       {result && (
-        <div className="bg-green-50 border border-green-100 rounded-lg p-3">
-          <p className="text-sm font-medium text-green-700 mb-2">
-            ✓ {result.allocated} lead{result.allocated !== 1 ? 's' : ''} allocated
+        <div className={`rounded-lg p-3 border
+          ${result.allocated > 0
+            ? 'bg-green-50 border-green-100'
+            : 'bg-gray-50 border-gray-200'}`}>
+          <p className={`text-sm font-medium mb-2
+            ${result.allocated > 0 ? 'text-green-700' : 'text-gray-500'}`}>
+            {result.allocated > 0
+              ? `✓ ${result.allocated} lead${result.allocated !== 1 ? 's' : ''} allocated`
+              : '✓ No unallocated leads found — everything is already assigned'}
           </p>
-          <div className="space-y-1">
-            {result.summary.map((s, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs text-green-600">
-                <span className="font-medium">{s.director}</span>
-                <span>→ {s.count} lead{s.count !== 1 ? 's' : ''}</span>
-              </div>
-            ))}
-          </div>
+          {/* FIX: guard with ?. and || [] so .map never crashes on undefined */}
+          {(result.summary || []).length > 0 && (
+            <div className="space-y-1">
+              {(result.summary || []).map((s, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs text-green-600">
+                  <span className="font-medium">{s.director}</span>
+                  <span>→ {s.count} lead{s.count !== 1 ? 's' : ''}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
+// ── Main Page ────────────────────────────────────────────────
+
 export default function AllocationConfig() {
-  const [directors, setDirectors]   = useState([]);
-  const [ratios,    setRatios]      = useState([{ director: '', weight: 1 }]);
-  const [isActive,  setIsActive]    = useState(true);
-  const [saving,    setSaving]      = useState(false);
-  const [preview,   setPreview]     = useState(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [stats,     setStats]       = useState(null);
-  const [configLoading, setConfigLoading]  = useState(true);
+  const [directors,     setDirectors]     = useState([]);
+  const [ratios,        setRatios]        = useState([{ director: '', weight: 1 }]);
+  const [isActive,      setIsActive]      = useState(true);
+  const [saving,        setSaving]        = useState(false);
+  const [preview,       setPreview]       = useState(null);
+  const [previewLoading,setPreviewLoading]= useState(false);
+  const [stats,         setStats]         = useState(null);
+  const [configLoading, setConfigLoading] = useState(true);
+
+  const refreshStats = useCallback(async () => {
+    const { data } = await api.get('/allocation/stats');
+    setStats(data);
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -237,6 +263,7 @@ export default function AllocationConfig() {
         ]);
         setDirectors(dirRes.data);
         setStats(statsRes.data);
+
         const cfg = cfgRes.data;
         setIsActive(cfg.isActive);
         if (cfg.ratios?.length) {
@@ -286,8 +313,7 @@ export default function AllocationConfig() {
     try {
       await api.put('/allocation/config', { ratios: valid, isActive });
       toast.success('Allocation config saved');
-      const { data } = await api.get('/allocation/stats');
-      setStats(data);
+      await refreshStats();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Save failed');
     } finally {
@@ -296,13 +322,14 @@ export default function AllocationConfig() {
   };
 
   const handleResetCursor = async () => {
-    if (!window.confirm('Reset the sequence to position 1?')) return;
+    if (!window.confirm('Reset the sequence to position 1? The next lead will go to the first director again.')) return;
     try {
       await api.post('/allocation/reset-cursor');
-      toast.success('Sequence cursor reset');
-      const { data } = await api.get('/allocation/stats');
-      setStats(data);
-    } catch { toast.error('Reset failed'); }
+      toast.success('Sequence cursor reset to position 1');
+      await refreshStats();
+    } catch {
+      toast.error('Reset failed');
+    }
   };
 
   const totalWeight = ratios.filter((r) => r.director && r.weight > 0)
@@ -321,30 +348,31 @@ export default function AllocationConfig() {
 
   return (
     <div className="max-w-4xl">
-      <div className="mb-5">
+      <div className="mb-6">
         <h2 className="page-title">Allocation Engine</h2>
         <p className="text-sm text-gray-400 mt-0.5">
           Configure ratio-based auto-assignment of incoming leads to directors.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
 
-        {/* Config editor */}
-        <div className="lg:col-span-3 space-y-4">
-          {/* Toggle */}
+        {/* ── Left: Config editor ───────────────── */}
+        <div className="lg:col-span-3 space-y-5">
+
+          {/* Active toggle */}
           <div className="card flex items-center justify-between">
-            <div className="flex-1 min-w-0 mr-4">
+            <div>
               <p className="text-sm font-medium text-gray-800">Auto-allocation</p>
               <p className="text-xs text-gray-400 mt-0.5">
-                Automatically assign new leads to directors using the ratios below.
+                When active, new leads are automatically assigned to directors using the ratios below.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setIsActive((v) => !v)}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full
-                transition-colors touch-manipulation
+              className={`relative inline-flex h-6 w-11 items-center rounded-full
+                transition-colors focus:outline-none
                 ${isActive ? 'bg-blue-600' : 'bg-gray-200'}`}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow
@@ -363,16 +391,14 @@ export default function AllocationConfig() {
               )}
             </div>
             <p className="text-xs text-gray-400 mb-4">
-              Weight = number of leads per cycle. Higher = more leads.
+              Weight = number of leads that director receives per cycle. Higher = more leads.
             </p>
 
-            <div className="hidden sm:flex items-center gap-3 mb-1 px-1">
+            <div className="flex items-center gap-3 mb-1 px-1">
               <div className="w-4" />
               <span className="flex-1 text-xs font-medium text-gray-400">Director</span>
-              <span className="text-xs font-medium text-gray-400 w-32 text-center">
-                Weight
-              </span>
-              <div className="w-8" />
+              <span className="text-xs font-medium text-gray-400 w-32 text-center">Weight</span>
+              <div className="w-7" />
             </div>
 
             <div>
@@ -392,12 +418,10 @@ export default function AllocationConfig() {
             <button
               type="button"
               onClick={addRow}
-              className="mt-3 flex items-center gap-2 text-xs text-blue-600
-                         hover:text-blue-800 font-medium touch-manipulation"
+              className="mt-3 flex items-center gap-2 text-xs text-blue-600 hover:text-blue-800 font-medium"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M12 4v16m8-8H4" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               Add director
             </button>
@@ -410,7 +434,7 @@ export default function AllocationConfig() {
             </p>
           </div>
 
-          <div className="flex gap-3 flex-wrap">
+          <div className="flex gap-3">
             <button onClick={handleSave} disabled={saving} className="btn-primary">
               {saving ? (
                 <>
@@ -437,8 +461,9 @@ export default function AllocationConfig() {
           </div>
         </div>
 
-        {/* Right: Preview + stats */}
-        <div className="lg:col-span-2 space-y-4">
+        {/* ── Right: Preview + stats ────────────── */}
+        <div className="lg:col-span-2 space-y-5">
+
           <div className="card">
             <h3 className="text-sm font-semibold text-gray-800 mb-3">Live preview</h3>
             <SequencePreview preview={preview} loading={previewLoading} />
@@ -451,9 +476,8 @@ export default function AllocationConfig() {
 
           {stats && (
             <div className="card">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">
-                Current distribution
-              </h3>
+              <h3 className="text-sm font-semibold text-gray-800 mb-3">Current distribution</h3>
+
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div className="bg-orange-50 rounded-lg p-3 text-center">
                   <p className="text-2xl font-bold text-orange-600">{stats.unallocated}</p>
@@ -474,7 +498,7 @@ export default function AllocationConfig() {
                 </div>
               )}
 
-              {stats.directorBreakdown.length > 0 && (
+              {(stats.directorBreakdown || []).length > 0 && (
                 <div className="space-y-2">
                   {stats.directorBreakdown.map((d) => {
                     const pct = stats.allocated > 0
@@ -482,8 +506,7 @@ export default function AllocationConfig() {
                     return (
                       <div key={d._id} className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center
-                                        justify-center text-xs font-semibold text-blue-700
-                                        flex-shrink-0">
+                                        justify-center text-xs font-semibold text-blue-700 flex-shrink-0">
                           {d.name?.charAt(0)}
                         </div>
                         <span className="text-xs text-gray-700 flex-1 truncate">{d.name}</span>
@@ -502,7 +525,11 @@ export default function AllocationConfig() {
             </div>
           )}
 
-          <RunPanel onRun={() => {}} unallocated={stats?.unallocated || 0} />
+          {/* RunPanel — passes onAllocated so stats refresh after run */}
+          <RunPanel
+            unallocated={stats?.unallocated || 0}
+            onAllocated={refreshStats}
+          />
         </div>
       </div>
     </div>
