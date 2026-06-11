@@ -1,36 +1,45 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import { ALLOWED_STATUS_TRANSITIONS, STATUS_BADGE_CLASSES } from '../../constants/leadConstants';
 
 /**
- * StatusEditor — click badge → dropdown with status list, notes, follow-up date.
+ * StatusEditor — portal-based dropdown that escapes ALL overflow containers.
  *
- * FIX: Uses position:fixed dropdown rendered via ReactDOM.createPortal().
- * This escapes overflow:hidden on table parents so the dropdown
- * never gets clipped — works correctly in All Leads table,
- * Director Dashboard table, and anywhere else.
+ * Why portals:
+ *   The table wrapper uses overflow:hidden + overflow-x:auto.
+ *   A regular position:absolute dropdown is clipped by both.
+ *   createPortal renders the dropdown directly into <body>, completely
+ *   outside the table DOM tree, so nothing can clip it.
  *
- * Role-aware: telecaller sees restricted list.
+ * Why position:fixed:
+ *   After portaling to <body>, we use getBoundingClientRect() on the badge
+ *   button to get its exact viewport position, then place the dropdown
+ *   with position:fixed at those coordinates.
+ *
+ * Smart vertical flip:
+ *   If the dropdown would go below the viewport, it opens ABOVE the badge.
+ *   max-height clamps it so it never overflows in either direction.
  */
 export default function StatusEditor({ lead, onSave, compact = false }) {
-  const { user }   = useAuth();
-  const [open, setOpen]           = useState(false);
-  const [status, setStatus]       = useState(lead.status);
-  const [notes, setNotes]         = useState(lead.notes || '');
+  const { user } = useAuth();
+
+  const [open, setOpen]               = useState(false);
+  const [status, setStatus]           = useState(lead.status);
+  const [notes, setNotes]             = useState(lead.notes || '');
   const [followUpDate, setFollowUpDate] = useState(
     lead.followUpDate ? new Date(lead.followUpDate).toISOString().slice(0, 10) : ''
   );
-  const [saving, setSaving]       = useState(false);
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
+  const [saving, setSaving]           = useState(false);
+  const [pos, setPos]                 = useState({ top: 0, left: 0, openUp: false, maxH: 400 });
 
-  const badgeRef   = useRef(null);
-  const dropRef    = useRef(null);
+  const badgeRef = useRef(null);
+  const dropRef  = useRef(null);
 
   const allowed      = ALLOWED_STATUS_TRANSITIONS[user.role] || [];
   const showFollowUp = status === 'Follow Up' || status === 'Called';
 
-  // Sync when lead prop changes
+  // Sync when lead changes externally
   useEffect(() => {
     setStatus(lead.status);
     setNotes(lead.notes || '');
@@ -38,41 +47,57 @@ export default function StatusEditor({ lead, onSave, compact = false }) {
       ? new Date(lead.followUpDate).toISOString().slice(0, 10) : '');
   }, [lead.status, lead.notes, lead.followUpDate]);
 
-  // Position the fixed dropdown below the badge
-  const openDropdown = useCallback(() => {
+  // Calculate fixed position, deciding open-up vs open-down
+  const calcPos = () => {
     if (!badgeRef.current) return;
-    const rect = badgeRef.current.getBoundingClientRect();
-    const dropW = 264; // min-width of dropdown
+    const r          = badgeRef.current.getBoundingClientRect();
+    const dropW      = 270;
+    const dropH      = 380; // approximate height
+    const vw         = window.innerWidth;
+    const vh         = window.innerHeight;
+    const gap        = 4;   // px gap between badge and dropdown
 
-    // Default: align left edge of dropdown with left edge of badge
-    let left = rect.left;
-    // If it would overflow the right edge of the viewport, flip left
-    if (left + dropW > window.innerWidth - 8) {
-      left = rect.right - dropW;
-    }
-    // Clamp to viewport
+    // Horizontal: left-align with badge, clamp to viewport
+    let left = r.left;
+    if (left + dropW > vw - 8) left = r.right - dropW;
     left = Math.max(8, left);
 
-    setDropdownPos({ top: rect.bottom + 4, left });
-    setOpen(true);
-  }, []);
+    // Vertical: open down if enough room, otherwise open up
+    const spaceBelow = vh - r.bottom - gap;
+    const spaceAbove = r.top - gap;
+    const openUp     = spaceBelow < dropH && spaceAbove > spaceBelow;
 
-  // Close on click outside (both badge and dropdown)
+    let top, maxH;
+    if (openUp) {
+      maxH = Math.min(dropH, spaceAbove - 8);
+      top  = r.top - maxH - gap;
+    } else {
+      maxH = Math.min(dropH, spaceBelow - 8);
+      top  = r.bottom + gap;
+    }
+
+    setPos({ top, left, openUp, maxH });
+  };
+
+  const openDropdown = () => {
+    calcPos();
+    setOpen(true);
+  };
+
+  // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
       if (
         badgeRef.current && !badgeRef.current.contains(e.target) &&
         dropRef.current  && !dropRef.current.contains(e.target)
-      ) {
-        setOpen(false);
-      }
+      ) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  // Close on scroll (keeps dropdown from floating away from badge)
+  // Close + recalc on scroll (badge may have moved)
   useEffect(() => {
     if (!open) return;
     const handler = () => setOpen(false);
@@ -88,19 +113,10 @@ export default function StatusEditor({ lead, onSave, compact = false }) {
     return () => document.removeEventListener('keydown', handler);
   }, [open]);
 
-  const handleToggle = () => {
-    if (open) setOpen(false);
-    else openDropdown();
-  };
-
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onSave(lead._id, {
-        status,
-        notes,
-        followUpDate: followUpDate || null,
-      });
+      await onSave(lead._id, { status, notes, followUpDate: followUpDate || null });
       setOpen(false);
     } finally {
       setSaving(false);
@@ -117,55 +133,56 @@ export default function StatusEditor({ lead, onSave, compact = false }) {
 
   const badgeCls = STATUS_BADGE_CLASSES[status] || 'bg-gray-100 text-gray-500 ring-gray-200';
 
-  // The dropdown panel — rendered via portal to escape overflow:hidden parents
+  // ── Dropdown rendered via portal ──────────────────────────
   const dropdown = open && createPortal(
     <div
       ref={dropRef}
-      className="bg-white rounded-xl border border-gray-200 shadow-2xl"
       style={{
         position:  'fixed',
-        top:       dropdownPos.top,
-        left:      dropdownPos.left,
-        zIndex:    9999,
-        minWidth:  '264px',
-        maxWidth:  '300px',
-        maxHeight: '80vh',
+        top:       pos.top,
+        left:      pos.left,
+        zIndex:    99999,
+        width:     270,
+        maxHeight: pos.maxH,
         overflowY: 'auto',
       }}
+      className="bg-white rounded-xl border border-gray-200 shadow-2xl flex flex-col"
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Status list */}
-      <div className="p-3 border-b border-gray-100">
+      {/* ── Status list ────────────────────────────────── */}
+      <div className="p-3 border-b border-gray-100 flex-shrink-0">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
           Update status
         </p>
-        <div className="grid grid-cols-1 gap-0.5 max-h-48 overflow-y-auto pr-0.5">
+        {/* Fixed-height scrollable list so it never pushes notes/save out of view */}
+        <div className="max-h-40 overflow-y-auto space-y-0.5 pr-0.5">
           {allowed.map((s) => (
             <button
               key={s}
               onClick={() => setStatus(s)}
-              className={`text-left px-2.5 py-2 rounded-lg text-xs font-medium transition-colors
+              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium
+                transition-colors
                 ${status === s
                   ? `ring-1 ring-inset ${STATUS_BADGE_CLASSES[s]}`
                   : 'text-gray-600 hover:bg-gray-50'}`}
             >
-              {status === s && <span className="mr-1.5 text-green-600">✓</span>}
+              {status === s && <span className="mr-1 text-current">✓</span>}
               {s}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Follow-up date */}
+      {/* ── Follow-up date ─────────────────────────────── */}
       {showFollowUp && (
-        <div className="px-3 pt-3 pb-0 border-b border-gray-100">
+        <div className="px-3 pt-2.5 pb-0 border-b border-gray-100 flex-shrink-0">
           <label className="block text-xs font-medium text-gray-500 mb-1">
             Follow-up date
           </label>
           <input
             type="date"
             className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs
-              text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+              text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2.5"
             value={followUpDate}
             min={new Date().toISOString().slice(0, 10)}
             onChange={(e) => setFollowUpDate(e.target.value)}
@@ -173,8 +190,8 @@ export default function StatusEditor({ lead, onSave, compact = false }) {
         </div>
       )}
 
-      {/* Notes + actions */}
-      <div className="p-3">
+      {/* ── Notes + Save/Cancel ────────────────────────── */}
+      <div className="p-3 flex-shrink-0">
         <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
         <textarea
           className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs
@@ -188,8 +205,8 @@ export default function StatusEditor({ lead, onSave, compact = false }) {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 bg-blue-600 text-white text-xs font-medium py-1.5 rounded-lg
-              hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="flex-1 bg-blue-600 text-white text-xs font-semibold py-1.5
+              rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
             {saving ? 'Saving...' : 'Save'}
           </button>
@@ -210,15 +227,17 @@ export default function StatusEditor({ lead, onSave, compact = false }) {
     <>
       <button
         ref={badgeRef}
-        onClick={handleToggle}
-        className={`inline-flex items-center gap-1 rounded-full font-medium ring-1 ring-inset
-          transition-opacity hover:opacity-80 cursor-pointer
+        onClick={(e) => { e.stopPropagation(); open ? setOpen(false) : openDropdown(); }}
+        className={`inline-flex items-center gap-1 rounded-full font-medium ring-1
+          ring-inset transition-opacity hover:opacity-80 cursor-pointer select-none
           ${compact ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-0.5 text-xs'} ${badgeCls}`}
         title="Click to update status"
       >
         {status}
-        <svg className={`w-3 h-3 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg
+          className={`w-3 h-3 opacity-60 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+        >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
