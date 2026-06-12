@@ -27,6 +27,7 @@ C:\Users\ajaik\Desktop\leads-management>node show-structure.js
       📄 User.js
    📄 package-lock.json
    📄 package.json
+   📄 reset-db.js
    📁 routes
       📄 allocation.js
       📄 audit.js
@@ -47,6 +48,7 @@ C:\Users\ajaik\Desktop\leads-management>node show-structure.js
       📄 seed.js
       📄 sheetsService.js
       📄 syncToSheets.js
+📄 file.txt
 📁 frontend
    📄 .env
    📄 .env.production
@@ -58,8 +60,10 @@ C:\Users\ajaik\Desktop\leads-management>node show-structure.js
       📄 icon-128x128.png
       📄 icon-144x144.png
       📄 icon-152x152.png
+      📄 icon-192x192-maskable.png
       📄 icon-192x192.png
       📄 icon-384x384.png
+      📄 icon-512x512-maskable.png
       📄 icon-512x512.png
       📄 icon-72x72.png
       📄 icon-96x96.png
@@ -69,6 +73,7 @@ C:\Users\ajaik\Desktop\leads-management>node show-structure.js
       📄 screenshot-narrow.png
       📄 screenshot-wide.png
       📄 sw.js
+      📄 vercel.json
    📁 src
       📄 App.jsx
       📁 components

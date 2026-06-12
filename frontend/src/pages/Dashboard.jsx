@@ -87,7 +87,7 @@ export default function Dashboard() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             <span className="hidden sm:inline">Add Lead</span>
-            <span className="sm:hidden">Add</span>
+            <span className="sm:hidden">Add Lead </span>
           </Link>
         )}
       </div>
@@ -323,11 +323,11 @@ export default function Dashboard() {
       )}
 
       {/* PWA status — Admin only */}
-      {user?.role === 'admin' && (
+      {/* {user?.role === 'admin' && (
         <div className="mt-4">
           <PwaStatusCard />
         </div>
-      )}
+      )} */}
     </div>
   );
 }

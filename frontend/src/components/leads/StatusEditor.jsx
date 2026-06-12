@@ -6,23 +6,18 @@ import { ALLOWED_STATUS_TRANSITIONS, STATUS_BADGE_CLASSES } from '../../constant
 /**
  * StatusEditor — portal dropdown, fully visible in every position.
  *
- * Architecture:
- *   createPortal → renders into document.body (escapes overflow:hidden tables)
- *   position:fixed + getBoundingClientRect → viewport-relative coordinates
+ * FIX vs previous version:
+ *   The "close on scroll" listener used { capture: true } on window,
+ *   which catches scroll events bubbling from ANY element — including
+ *   the internal status-list scroll container. Clicking a status near
+ *   the top/bottom edge of that scrollable list sometimes triggers a
+ *   tiny native scroll (focus-into-view), which bubbled up and closed
+ *   the dropdown before the click's onClick handler ran.
  *
- * Layout (always shows all 3 sections):
- *   ┌─────────────────────────────┐
- *   │  Status list (scrolls)      │ ← flex-1, own overflow-y:auto
- *   ├─────────────────────────────┤
- *   │  Follow-up date (optional)  │ ← flex-shrink-0, never hidden
- *   ├─────────────────────────────┤
- *   │  Notes + Save/Cancel        │ ← flex-shrink-0, always visible
- *   └─────────────────────────────┘
- *
- * Smart flip:
- *   Opens below badge by default.
- *   If not enough space below → opens above badge.
- *   Total height is capped so it never escapes the viewport.
+ *   Fix: the scroll handler now checks event.target — if the scroll
+ *   originated from inside dropRef (our own dropdown), it's ignored.
+ *   Only scrolls of the PAGE itself (or other ancestors) close the
+ *   dropdown.
  */
 export default function StatusEditor({ lead, onSave, compact = false }) {
   const { user } = useAuth();
@@ -57,24 +52,17 @@ export default function StatusEditor({ lead, onSave, compact = false }) {
     const r   = badgeRef.current.getBoundingClientRect();
     const vw  = window.innerWidth;
     const vh  = window.innerHeight;
-    const W   = 272;   // dropdown width
-    const GAP = 6;     // gap between badge and dropdown
+    const W   = 272;
+    const GAP = 6;
 
-    // ── Horizontal ─────────────────────────────────────────
     let left = r.left;
-    // Overflow right side → right-align with badge
     if (left + W > vw - 8) left = r.right - W;
     left = Math.max(8, left);
 
-    // ── Vertical ───────────────────────────────────────────
-    const spaceBelow = vh - r.bottom - GAP - 8;  // available px below badge
-    const spaceAbove = r.top - GAP - 8;           // available px above badge
-
-    // Minimum usable height for the panel
-    // Status list needs at least 5 items visible (~140px), plus notes+save (~120px)
+    const spaceBelow = vh - r.bottom - GAP - 8;
+    const spaceAbove = r.top - GAP - 8;
     const MIN_USABLE = 260;
 
-    // Open below if there's enough room, otherwise open above
     const openBelow = spaceBelow >= MIN_USABLE || spaceBelow >= spaceAbove;
     const maxH      = openBelow
       ? Math.max(MIN_USABLE, Math.min(460, spaceBelow))
@@ -88,7 +76,7 @@ export default function StatusEditor({ lead, onSave, compact = false }) {
       left,
       ...(openBelow
         ? { top:    r.bottom + GAP }
-        : { bottom: vh - r.top + GAP }   // anchor to top of badge
+        : { bottom: vh - r.top + GAP }
       ),
     };
   };
@@ -111,10 +99,16 @@ export default function StatusEditor({ lead, onSave, compact = false }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  // Close on scroll (badge position may change)
+  // Close on PAGE scroll only — ignore scrolls originating inside the dropdown
+  // (e.g. scrolling the status list itself shouldn't close the panel)
   useEffect(() => {
     if (!open) return;
-    const handler = () => setOpen(false);
+    const handler = (e) => {
+      if (dropRef.current && dropRef.current.contains(e.target)) {
+        return; // scroll happened inside our dropdown — ignore
+      }
+      setOpen(false);
+    };
     window.addEventListener('scroll', handler, true);
     return () => window.removeEventListener('scroll', handler, true);
   }, [open]);
@@ -145,12 +139,16 @@ export default function StatusEditor({ lead, onSave, compact = false }) {
       ? new Date(lead.followUpDate).toISOString().slice(0, 10) : '');
   };
 
+  // Status button click — stop propagation so the mousedown "outside click"
+  // handler never sees this as an outside click in any edge case
+  const handleStatusClick = (e, s) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setStatus(s);
+  };
+
   const badgeCls = STATUS_BADGE_CLASSES[status] || 'bg-gray-100 text-gray-500 ring-gray-200';
 
-  // ── Dropdown panel ─────────────────────────────────────────
-  // Key layout rule: outer div is a flex column.
-  // The status list (flex-1 + overflow-y:auto) fills available space.
-  // Follow-up + Notes/Save are flex-shrink-0 → always fully visible.
   const dropdown = open && createPortal(
     <div
       ref={dropRef}
@@ -158,6 +156,7 @@ export default function StatusEditor({ lead, onSave, compact = false }) {
       className="bg-white rounded-xl border border-gray-200 shadow-2xl
                  flex flex-col overflow-hidden"
       onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
     >
 
       {/* ── 1. Status list — scrolls within its own area ── */}
@@ -166,22 +165,22 @@ export default function StatusEditor({ lead, onSave, compact = false }) {
                       uppercase tracking-wide flex-shrink-0">
           Update status
         </p>
-        {/* This div takes all remaining space and scrolls if needed */}
         <div className="overflow-y-auto flex-1 px-2 pb-2">
           {allowed.map((s) => (
             <button
               key={s}
-              onClick={() => setStatus(s)}
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => handleStatusClick(e, s)}
               className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium
                 transition-colors mb-0.5
                 ${status === s
                   ? `ring-1 ring-inset ${STATUS_BADGE_CLASSES[s]}`
                   : 'text-gray-600 hover:bg-gray-50'}`}
             >
-              {status === s && (
+              {status === s ? (
                 <span className="inline-block w-3.5 mr-1 text-center">✓</span>
-              )}
-              {status !== s && (
+              ) : (
                 <span className="inline-block w-3.5 mr-1" />
               )}
               {s}
@@ -220,6 +219,7 @@ export default function StatusEditor({ lead, onSave, compact = false }) {
         />
         <div className="flex gap-2 mt-2">
           <button
+            type="button"
             onClick={handleSave}
             disabled={saving}
             className="flex-1 bg-blue-600 text-white text-xs font-semibold
@@ -228,6 +228,7 @@ export default function StatusEditor({ lead, onSave, compact = false }) {
             {saving ? 'Saving...' : 'Save'}
           </button>
           <button
+            type="button"
             onClick={handleCancel}
             className="px-3 bg-gray-100 text-gray-600 text-xs font-medium
               py-2 rounded-lg hover:bg-gray-200 transition-colors"
@@ -243,9 +244,9 @@ export default function StatusEditor({ lead, onSave, compact = false }) {
 
   return (
     <>
-      {/* Badge trigger button */}
       <button
         ref={badgeRef}
+        type="button"
         onClick={(e) => {
           e.stopPropagation();
           open ? setOpen(false) : openDropdown();

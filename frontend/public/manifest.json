@@ -2,16 +2,11 @@
   "name": "VVMS CRM",
   "short_name": "VVMS CRM",
   "description": "Real estate lead capture, allocation and tracking platform",
-  "id": "/dashboard",
   "start_url": "/dashboard",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
-  "orientation": "any",
   "background_color": "#2563EB",
   "theme_color": "#2563EB",
-  "scope": "/",
-  "lang": "en-IN",
-  "categories": ["business", "productivity"],
+  "orientation": "portrait-primary",
   "icons": [
     {
       "src": "/icon-72x72.png",
@@ -67,17 +62,16 @@
       "src": "/screenshot-wide.png",
       "sizes": "1280x720",
       "type": "image/png",
-      "form_factor": "wide",
-      "label": "VVMS CRM Dashboard"
+      "form_factor": "wide"
     },
     {
       "src": "/screenshot-narrow.png",
       "sizes": "390x844",
       "type": "image/png",
-      "form_factor": "narrow",
-      "label": "VVMS CRM Mobile"
+      "form_factor": "narrow"
     }
   ],
+  "categories": ["business", "productivity"],
   "share_target": {
     "action": "/ocr-capture",
     "method": "POST",
@@ -100,7 +94,7 @@
       "icons": [{ "src": "/icon-96x96.png", "sizes": "96x96" }]
     },
     {
-      "name": "Upload Images",
+      "name": "OCR Capture",
       "short_name": "Scan",
       "description": "Scan image for lead contacts",
       "url": "/ocr-capture",
@@ -113,6 +107,5 @@
       "url": "/my-leads",
       "icons": [{ "src": "/icon-96x96.png", "sizes": "96x96" }]
     }
-  ],
-  "prefer_related_applications": false
+  ]
 }

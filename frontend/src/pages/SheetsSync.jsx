@@ -458,7 +458,7 @@ export default function SheetsSync() {
               </p>
             </div>
 
-            <div>
+            {/* <div>
               <label className="label">Sync triggers</label>
               <div className="flex gap-4 flex-wrap">
                 <label className="flex items-center gap-2 cursor-pointer touch-manipulation">
@@ -480,7 +480,7 @@ export default function SheetsSync() {
                   <span className="text-sm text-gray-700">On lead update</span>
                 </label>
               </div>
-            </div>
+            </div> */}
           </div>
 
           {/* Service account credentials */}
@@ -577,7 +577,7 @@ export default function SheetsSync() {
                 </>
               )}
             </button>
-            <button
+            {/* <button
               onClick={handleVerify}
               disabled={verifying || !extractedId || !cfg?.hasCredentials}
               className="btn-secondary"
@@ -600,7 +600,7 @@ export default function SheetsSync() {
                   Test connection
                 </>
               )}
-            </button>
+            </button> */}
           </div>
         </div>
 
