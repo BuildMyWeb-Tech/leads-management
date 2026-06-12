@@ -100,7 +100,7 @@
       "icons": [{ "src": "/icon-96x96.png", "sizes": "96x96" }]
     },
     {
-      "name": "OCR Capture",
+      "name": "Upload Images",
       "short_name": "Scan",
       "description": "Scan image for lead contacts",
       "url": "/ocr-capture",

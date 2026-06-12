@@ -64,7 +64,7 @@ export default function InstallPrompt() {
           </div>
 
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900">Install A2S CRM</p>
+            <p className="text-sm font-semibold text-gray-900">Install VVMS CRM</p>
 
             {isIOS ? (
               <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">

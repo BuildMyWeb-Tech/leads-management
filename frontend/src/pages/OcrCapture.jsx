@@ -237,7 +237,7 @@ const handleReset = () => {
             </svg>
           </Link>
           <div>
-            <h2 className="page-title">OCR Lead Capture</h2>
+            <h2 className="page-title">Upload Images</h2>
             <p className="text-sm text-gray-400 mt-0.5 hidden sm:block">
               Extract leads from screenshots, WhatsApp contacts, or ad images
             </p>
@@ -363,7 +363,7 @@ const handleReset = () => {
               </div>
             )}
 
-            {stage === STAGE.IDLE && queue.length === 0 && (
+            {/* {stage === STAGE.IDLE && queue.length === 0 && (
               <div className="card">
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
                   What works best
@@ -394,7 +394,7 @@ const handleReset = () => {
                   </ul>
                 </div>
               </div>
-            )}
+            )} */}
           </div>
         )}
       </div>

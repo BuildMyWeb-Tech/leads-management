@@ -38,7 +38,7 @@ export default function Login() {
                 d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span className="text-white font-bold text-lg tracking-tight">A2S Cinemas CRM</span>
+          <span className="text-white font-bold text-lg tracking-tight">VVMS CRM</span>
         </div>
 
         <div className="space-y-8">
@@ -48,7 +48,7 @@ export default function Login() {
             </h2>
             <p className="text-blue-200 mt-3 text-sm leading-relaxed">
               Capture, allocate and convert leads with a complete pipeline —
-              from OCR capture to booking.
+              from Upload Images to booking.
             </p>
           </div>
           <ul className="space-y-3">
@@ -71,7 +71,7 @@ export default function Login() {
           </ul>
         </div>
 
-        <p className="text-blue-300 text-xs">© 2026 A2S Cinemas. All rights reserved.</p>
+        <p className="text-blue-300 text-xs">© 2026 VVMS. All rights reserved.</p>
       </div>
 
       {/* ── Right panel: login form ─────────────────────────── */}
@@ -88,7 +88,7 @@ export default function Login() {
                   d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
-            <span className="font-bold text-gray-900 text-lg">A2S Cinemas CRM</span>
+            <span className="font-bold text-gray-900 text-lg">VVMS CRM</span>
           </div>
 
           {/* Heading */}
@@ -111,7 +111,7 @@ export default function Login() {
                 name="email"
                 value={form.email}
                 onChange={handleChange}
-                placeholder="you@a2scinemas.com"
+                placeholder="you@vvms.com"
                 required
                 autoFocus
                 autoComplete="email"

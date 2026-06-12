@@ -83,7 +83,7 @@ function ProtectedRoute({ children, allowedRoles }) {
                   d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
-            <span className="text-sm font-bold text-gray-900">A2S CRM</span>
+            <span className="text-sm font-bold text-gray-900">VVMS CRM</span>
           </div>
 
           {/* Right spacer — keeps brand centered */}

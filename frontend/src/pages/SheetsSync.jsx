@@ -484,7 +484,7 @@ export default function SheetsSync() {
           </div>
 
           {/* Service account credentials */}
-          <div className="card space-y-3">
+          {/* <div className="card space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h3 className="text-sm font-semibold text-gray-800">
                 Service account credentials
@@ -539,7 +539,7 @@ export default function SheetsSync() {
                 </div>
               )}
             </div>
-          </div>
+          </div> */}
 
           {/* Column order */}
           <div className="card">
@@ -708,7 +708,7 @@ export default function SheetsSync() {
           )}
 
           {/* Data flow info */}
-          <div className="card bg-gray-50 border-gray-200">
+          {/* <div className="card bg-gray-50 border-gray-200">
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
               How sync works
             </h3>
@@ -728,7 +728,7 @@ export default function SheetsSync() {
                 MongoDB data is <strong>never</strong> affected by Sheets failures.
               </p>
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>
