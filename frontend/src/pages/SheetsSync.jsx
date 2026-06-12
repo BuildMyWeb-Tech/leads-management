@@ -577,7 +577,7 @@ export default function SheetsSync() {
                 </>
               )}
             </button>
-            {/* <button
+            <button
               onClick={handleVerify}
               disabled={verifying || !extractedId || !cfg?.hasCredentials}
               className="btn-secondary"
@@ -600,7 +600,7 @@ export default function SheetsSync() {
                   Test connection
                 </>
               )}
-            </button> */}
+            </button>
           </div>
         </div>
 
