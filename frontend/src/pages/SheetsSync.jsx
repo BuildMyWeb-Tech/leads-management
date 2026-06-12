@@ -484,7 +484,7 @@ export default function SheetsSync() {
           </div>
 
           {/* Service account credentials */}
-          {/* <div className="card space-y-3">
+          <div className="card space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h3 className="text-sm font-semibold text-gray-800">
                 Service account credentials
@@ -539,7 +539,7 @@ export default function SheetsSync() {
                 </div>
               )}
             </div>
-          </div> */}
+          </div>
 
           {/* Column order */}
           <div className="card">
