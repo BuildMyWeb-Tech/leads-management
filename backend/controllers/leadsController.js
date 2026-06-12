@@ -189,6 +189,19 @@ const bulkAssign = async (req, res) => {
       for (const l of leads) notify.leadAssignedToTelecaller(assignedTelecaller, l.name);
     }
     audit.leadBulkAssigned(req, leadIds.length, dirName, tcName);
+
+    // Sync each affected lead to Google Sheets.
+    // bulkAssign uses Lead.updateMany() which bypasses the single-lead
+    // update path (updateLead) entirely, so syncToSheets was never
+    // called here. Director/telecaller assignments made via the
+    // Allocate Leads page never appeared in the sheet until a manual
+    // "Sync all leads now". Fix: upsert each lead individually here.
+    const updatedLeads = await Lead.find({ _id: { $in: leadIds } })
+      .populate('assignedDirector',   'name email')
+      .populate('assignedTelecaller', 'name email');
+    for (const l of updatedLeads) {
+      syncToSheets(l, 'update');
+    }
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
 

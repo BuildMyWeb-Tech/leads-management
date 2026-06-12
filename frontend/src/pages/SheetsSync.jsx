@@ -458,7 +458,7 @@ export default function SheetsSync() {
               </p>
             </div>
 
-            {/* <div>
+            <div>
               <label className="label">Sync triggers</label>
               <div className="flex gap-4 flex-wrap">
                 <label className="flex items-center gap-2 cursor-pointer touch-manipulation">
@@ -480,7 +480,7 @@ export default function SheetsSync() {
                   <span className="text-sm text-gray-700">On lead update</span>
                 </label>
               </div>
-            </div> */}
+            </div>
           </div>
 
           {/* Service account credentials */}
@@ -500,14 +500,14 @@ export default function SheetsSync() {
               )}
             </div>
 
-            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700 space-y-1">
+            {/* <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700 space-y-1">
               <p className="font-semibold mb-1">Setup steps:</p>
               <p>1. Google Cloud Console → APIs & Services → Credentials</p>
               <p>2. Create a Service Account, download the JSON key file</p>
               <p>3. Share spreadsheet → add service account email as <strong>Editor</strong></p>
               <p>4. Enable the Google Sheets API in your project</p>
               <p>5. Paste the full JSON key content below</p>
-            </div>
+            </div> */}
 
             <div>
               <div className="flex items-center justify-between mb-1">
