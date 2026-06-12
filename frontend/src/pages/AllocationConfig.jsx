@@ -1,17 +1,44 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 
-// ── Sub-components ────────────────────────────────────────────
+// ── Director sequence row — drag handle + enable toggle ────────
+// Replaces old RatioRow. No weight controls.
+function DirectorSequenceRow({
+  entry, index, directors, onChange, onRemove, isOnly,
+  onDragStart, onDragOver, onDrop, onDragEnd, isDragging,
+}) {
+  const dir = directors.find((d) => d._id === entry.director);
 
-function RatioRow({ ratio, index, directors, onChange, onRemove, isOnly }) {
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-gray-100 last:border-0">
-      <div className="text-gray-300 cursor-grab select-none text-sm w-4 text-center">⠿</div>
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, index)}
+      onDragOver={(e) => onDragOver(e, index)}
+      onDrop={(e) => onDrop(e, index)}
+      onDragEnd={onDragEnd}
+      className={`flex items-center gap-3 py-2.5 border-b border-gray-100 last:border-0
+        transition-opacity ${isDragging ? 'opacity-40' : 'opacity-100'}`}
+    >
+      {/* Drag handle */}
+      <div
+        className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing
+                   select-none text-base w-5 text-center flex-shrink-0 touch-none"
+        title="Drag to reorder"
+      >
+        ⠿
+      </div>
 
+      {/* Sequence position number */}
+      <div className="w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-xs font-semibold
+                      flex items-center justify-center flex-shrink-0">
+        {index + 1}
+      </div>
+
+      {/* Director select */}
       <select
         className="input flex-1 text-sm"
-        value={ratio.director}
+        value={entry.director}
         onChange={(e) => onChange(index, 'director', e.target.value)}
       >
         <option value="">— Select Director —</option>
@@ -20,37 +47,33 @@ function RatioRow({ ratio, index, directors, onChange, onRemove, isOnly }) {
         ))}
       </select>
 
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        <button
-          type="button"
-          onClick={() => onChange(index, 'weight', Math.max(1, ratio.weight - 1))}
-          className="w-7 h-7 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50
-                     flex items-center justify-center text-sm font-medium"
-        >−</button>
-        <input
-          type="number"
-          min={1} max={100}
-          className="w-14 border border-gray-200 rounded-md px-2 py-1 text-sm text-center
-                     font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
-          value={ratio.weight}
-          onChange={(e) => onChange(index, 'weight',
-            Math.max(1, Math.min(100, Number(e.target.value) || 1)))}
-        />
-        <button
-          type="button"
-          onClick={() => onChange(index, 'weight', Math.min(100, ratio.weight + 1))}
-          className="w-7 h-7 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50
-                     flex items-center justify-center text-sm font-medium"
-        >+</button>
-      </div>
+      {/* Enable / disable toggle */}
+      <button
+        type="button"
+        onClick={() => onChange(index, 'enabled', !entry.enabled)}
+        className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full
+          transition-colors
+          ${entry.enabled ? 'bg-blue-600' : 'bg-gray-200'}`}
+        title={entry.enabled ? 'Enabled — receives leads' : 'Disabled — skipped'}
+      >
+        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow
+          transition-transform ${entry.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+      </button>
 
+      {/* Status label */}
+      <span className={`text-xs font-medium w-16 flex-shrink-0
+        ${entry.enabled ? 'text-green-600' : 'text-gray-400'}`}>
+        {entry.enabled ? 'Enabled' : 'Disabled'}
+      </span>
+
+      {/* Remove */}
       <button
         type="button"
         onClick={() => onRemove(index)}
         disabled={isOnly}
         className="w-7 h-7 flex items-center justify-center rounded-md text-gray-300
                    hover:text-red-500 hover:bg-red-50 disabled:opacity-30
-                   disabled:cursor-not-allowed transition-colors"
+                   disabled:cursor-not-allowed transition-colors flex-shrink-0"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -61,86 +84,74 @@ function RatioRow({ ratio, index, directors, onChange, onRemove, isOnly }) {
   );
 }
 
+// ── Live preview — numbered Lead N → Director list ──────────────
 function SequencePreview({ preview, loading }) {
   if (loading) {
     return <div className="py-6 text-center text-sm text-gray-400">Computing preview...</div>;
   }
   if (!preview) return null;
 
-  const { summary, totalWeight } = preview;
+  const { sequence, enabledCount, startPointer } = preview;
+
+  const colors = [
+    'bg-blue-100 text-blue-700','bg-indigo-100 text-indigo-700',
+    'bg-purple-100 text-purple-700','bg-teal-100 text-teal-700',
+    'bg-green-100 text-green-700','bg-amber-100 text-amber-700',
+    'bg-orange-100 text-orange-700','bg-pink-100 text-pink-700',
+  ];
+
+  // Map each unique director name to a stable color
+  const colorMap = {};
+  let nextColor = 0;
+  sequence.forEach((s) => {
+    if (!(s.directorId in colorMap)) {
+      colorMap[s.directorId] = colors[nextColor % colors.length];
+      nextColor++;
+    }
+  });
 
   return (
     <div>
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-        Sequence preview — 1 cycle = {totalWeight} leads
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+        Upcoming sequence
+      </p>
+      <p className="text-xs text-gray-400 mb-3">
+        {enabledCount} director{enabledCount !== 1 ? 's' : ''} in rotation
+        {startPointer > 0 && (
+          <span> — continuing from position {(startPointer % enabledCount) + 1}</span>
+        )}
       </p>
 
-      <div className="flex rounded-lg overflow-hidden h-8 mb-4">
-        {summary.map((item, i) => {
-          const colors = ['bg-blue-500','bg-indigo-500','bg-purple-500','bg-teal-500',
-                          'bg-green-500','bg-amber-500','bg-orange-500','bg-pink-500'];
-          return (
-            <div
-              key={i}
-              className={`${colors[i % colors.length]} flex items-center justify-center
-                text-white text-xs font-semibold transition-all`}
-              style={{ width: `${item.pct}%` }}
-              title={`${item.director}: ${item.count} leads (${item.pct}%)`}
-            >
-              {item.pct >= 8 ? `${item.pct}%` : ''}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="space-y-2">
-        {summary.map((item, i) => {
-          const colors = [
-            'bg-blue-100 text-blue-700','bg-indigo-100 text-indigo-700',
-            'bg-purple-100 text-purple-700','bg-teal-100 text-teal-700',
-            'bg-green-100 text-green-700','bg-amber-100 text-amber-700',
-            'bg-orange-100 text-orange-700','bg-pink-100 text-pink-700',
-          ];
-          const cls = colors[i % colors.length];
-          return (
-            <div key={i} className="flex items-center gap-3">
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full
-                text-xs font-medium w-36 truncate ${cls}`}>
-                {item.director}
-              </span>
-              <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                <div
-                  className={`h-1.5 rounded-full ${
-                    cls.replace(/text-\S+/, '').replace('bg-', 'bg-').replace('-100', '-400')
-                  }`}
-                  style={{ width: `${item.pct}%` }}
-                />
-              </div>
-              <span className="text-xs text-gray-600 w-24 text-right">
-                {item.from}–{item.to} ({item.weight} lead{item.weight !== 1 ? 's' : ''})
-              </span>
-              <span className="text-xs font-medium text-gray-500 w-8 text-right">
-                {item.pct}%
-              </span>
-            </div>
-          );
-        })}
+      <div className="space-y-1.5">
+        {sequence.map((item) => (
+          <div key={item.leadNumber} className="flex items-center gap-2">
+            <span className="text-xs text-gray-400 w-16 flex-shrink-0">
+              Lead {item.leadNumber}
+            </span>
+            <svg className="w-3 h-3 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+            </svg>
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full
+              text-xs font-medium truncate ${colorMap[item.directorId]}`}>
+              {item.director}
+            </span>
+          </div>
+        ))}
       </div>
 
       <p className="text-xs text-gray-400 mt-3">
-        After lead #{totalWeight} the sequence repeats from position 1.
+        After lead {sequence.length} the sequence continues — position {enabledCount} loops back to 1.
       </p>
     </div>
   );
 }
 
-// ── RunPanel — FIXED: guards result.summary with ?. and || [] ─
+// ── RunPanel — unchanged from previous fix ──────────────────────
 function RunPanel({ unallocated, onAllocated }) {
   const [count,   setCount]   = useState('');
   const [running, setRunning] = useState(false);
   const [result,  setResult]  = useState(null);
 
-  // Reset result display when unallocated count changes
   useEffect(() => {
     if (unallocated > 0) setResult(null);
   }, [unallocated]);
@@ -153,7 +164,6 @@ function RunPanel({ unallocated, onAllocated }) {
       const { data }  = await api.post('/allocation/run', body);
       setResult(data);
       toast.success(data.message);
-      // Notify parent to refresh stats
       onAllocated?.();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Allocation failed');
@@ -166,7 +176,7 @@ function RunPanel({ unallocated, onAllocated }) {
     <div className="card">
       <h3 className="text-sm font-semibold text-gray-800 mb-1">Run allocation</h3>
       <p className="text-xs text-gray-400 mb-4">
-        Assign unallocated leads to directors using the configured ratios.
+        Assign unallocated leads to directors using the configured sequence.
         <span className="ml-1 font-medium text-orange-500">
           {unallocated} lead{unallocated !== 1 ? 's' : ''} waiting.
         </span>
@@ -219,7 +229,6 @@ function RunPanel({ unallocated, onAllocated }) {
               ? `✓ ${result.allocated} lead${result.allocated !== 1 ? 's' : ''} allocated`
               : '✓ No unallocated leads found — everything is already assigned'}
           </p>
-          {/* FIX: guard with ?. and || [] so .map never crashes on undefined */}
           {(result.summary || []).length > 0 && (
             <div className="space-y-1">
               {(result.summary || []).map((s, i) => (
@@ -239,14 +248,16 @@ function RunPanel({ unallocated, onAllocated }) {
 // ── Main Page ────────────────────────────────────────────────
 
 export default function AllocationConfig() {
-  const [directors,     setDirectors]     = useState([]);
-  const [ratios,        setRatios]        = useState([{ director: '', weight: 1 }]);
+  const [directors,     setDirectors]     = useState([]); // all available directors (users)
+  const [entries,       setEntries]       = useState([{ director: '', enabled: true, sequenceOrder: 0 }]);
   const [isActive,      setIsActive]      = useState(true);
   const [saving,        setSaving]        = useState(false);
   const [preview,       setPreview]       = useState(null);
   const [previewLoading,setPreviewLoading]= useState(false);
   const [stats,         setStats]         = useState(null);
   const [configLoading, setConfigLoading] = useState(true);
+
+  const dragIndex = useRef(null);
 
   const refreshStats = useCallback(async () => {
     const { data } = await api.get('/allocation/stats');
@@ -266,11 +277,16 @@ export default function AllocationConfig() {
 
         const cfg = cfgRes.data;
         setIsActive(cfg.isActive);
-        if (cfg.ratios?.length) {
-          setRatios(cfg.ratios.map((r) => ({
-            director: String(r.director?._id || r.director),
-            weight:   r.weight,
-          })));
+        if (cfg.directors?.length) {
+          setEntries(
+            [...cfg.directors]
+              .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
+              .map((d) => ({
+                director:      String(d.director?._id || d.director),
+                enabled:       d.enabled !== false,
+                sequenceOrder: d.sequenceOrder,
+              }))
+          );
         }
       } catch {
         toast.error('Failed to load config');
@@ -282,36 +298,88 @@ export default function AllocationConfig() {
   }, []);
 
   const fetchPreview = useCallback(async () => {
-    const valid = ratios.filter((r) => r.director && r.weight > 0);
+    const valid = entries.filter((e) => e.director);
     if (valid.length === 0) { setPreview(null); return; }
     setPreviewLoading(true);
     try {
-      const { data } = await api.post('/allocation/preview', { ratios: valid });
+      const payload = valid.map((e, i) => ({ ...e, sequenceOrder: i }));
+      const { data } = await api.post('/allocation/preview', { directors: payload, count: 8 });
       setPreview(data);
     } catch { setPreview(null); }
     finally { setPreviewLoading(false); }
-  }, [ratios]);
+  }, [entries]);
 
   useEffect(() => {
     const t = setTimeout(fetchPreview, 400);
     return () => clearTimeout(t);
   }, [fetchPreview]);
 
-  const handleRatioChange = (index, field, value) =>
-    setRatios((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)));
+  const handleEntryChange = (index, field, value) =>
+    setEntries((prev) => prev.map((e, i) => (i === index ? { ...e, [field]: value } : e)));
 
-  const addRow    = () => setRatios((prev) => [...prev, { director: '', weight: 1 }]);
-  const removeRow = (index) => setRatios((prev) => prev.filter((_, i) => i !== index));
+  const addRow = () =>
+    setEntries((prev) => [...prev, { director: '', enabled: true, sequenceOrder: prev.length }]);
+
+  const removeRow = (index) =>
+    setEntries((prev) => prev.filter((_, i) => i !== index)
+      .map((e, i) => ({ ...e, sequenceOrder: i })));
+
+  // ── Drag and drop reordering ──────────────────────────────
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+
+  const handleDragStart = (e, index) => {
+    dragIndex.current = index;
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    if (index !== dragIndex.current) setDragOverIndex(index);
+  };
+
+  const handleDrop = (e, index) => {
+    e.preventDefault();
+    const from = dragIndex.current;
+    const to   = index;
+    if (from === null || from === to) {
+      setDragOverIndex(null);
+      return;
+    }
+    setEntries((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      // Re-number sequenceOrder to match new array order
+      return next.map((e, i) => ({ ...e, sequenceOrder: i }));
+    });
+    dragIndex.current = null;
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    dragIndex.current = null;
+    setDragOverIndex(null);
+  };
 
   const handleSave = async () => {
-    const valid = ratios.filter((r) => r.director && r.weight > 0);
-    if (valid.length === 0) return toast.error('Add at least one director with a weight');
-    const ids = valid.map((r) => r.director);
+    const valid = entries.filter((e) => e.director);
+    if (valid.length === 0) return toast.error('Add at least one director');
+    const ids = valid.map((e) => e.director);
     if (new Set(ids).size !== ids.length) return toast.error('Each director can only appear once');
+
+    const enabledCount = valid.filter((e) => e.enabled).length;
+    if (isActive && enabledCount === 0) {
+      return toast.error('At least one director must be enabled');
+    }
 
     setSaving(true);
     try {
-      await api.put('/allocation/config', { ratios: valid, isActive });
+      const payload = valid.map((e, i) => ({
+        director: e.director,
+        enabled: e.enabled,
+        sequenceOrder: i,
+      }));
+      await api.put('/allocation/config', { directors: payload, isActive });
       toast.success('Allocation config saved');
       await refreshStats();
     } catch (err) {
@@ -322,18 +390,18 @@ export default function AllocationConfig() {
   };
 
   const handleResetCursor = async () => {
-    if (!window.confirm('Reset the sequence to position 1? The next lead will go to the first director again.')) return;
+    if (!window.confirm('Reset the sequence to position 1? The next lead will go to the first director in the sequence again.')) return;
     try {
       await api.post('/allocation/reset-cursor');
-      toast.success('Sequence cursor reset to position 1');
+      toast.success('Sequence pointer reset to position 1');
       await refreshStats();
+      await fetchPreview();
     } catch {
       toast.error('Reset failed');
     }
   };
 
-  const totalWeight = ratios.filter((r) => r.director && r.weight > 0)
-    .reduce((s, r) => s + Number(r.weight), 0);
+  const enabledCount = entries.filter((e) => e.director && e.enabled).length;
 
   if (configLoading) {
     return (
@@ -351,7 +419,7 @@ export default function AllocationConfig() {
       <div className="mb-6">
         <h2 className="page-title">Allocation Engine</h2>
         <p className="text-sm text-gray-400 mt-0.5">
-          Configure ratio-based auto-assignment of incoming leads to directors.
+          Round-robin auto-assignment of incoming leads to directors, in sequence order.
         </p>
       </div>
 
@@ -365,7 +433,7 @@ export default function AllocationConfig() {
             <div>
               <p className="text-sm font-medium text-gray-800">Auto-allocation</p>
               <p className="text-xs text-gray-400 mt-0.5">
-                When active, new leads are automatically assigned to directors using the ratios below.
+                When active, new leads are automatically assigned to the next director in sequence.
               </p>
             </div>
             <button
@@ -380,38 +448,50 @@ export default function AllocationConfig() {
             </button>
           </div>
 
-          {/* Ratios editor */}
+          {/* Director sequence editor */}
           <div className="card">
             <div className="flex items-center justify-between mb-1">
-              <h3 className="text-sm font-semibold text-gray-800">Director ratios</h3>
-              {totalWeight > 0 && (
+              <h3 className="text-sm font-semibold text-gray-800">Director sequence</h3>
+              {enabledCount > 0 && (
                 <span className="text-xs text-gray-400">
-                  Total: <span className="font-semibold text-gray-600">{totalWeight}</span>
+                  <span className="font-semibold text-gray-600">{enabledCount}</span> enabled
                 </span>
               )}
             </div>
             <p className="text-xs text-gray-400 mb-4">
-              Weight = number of leads that director receives per cycle. Higher = more leads.
+              Drag to reorder. Each new lead goes to the next enabled director in this list,
+              looping back to the top after the last one.
             </p>
 
             <div className="flex items-center gap-3 mb-1 px-1">
-              <div className="w-4" />
+              <div className="w-5" />
+              <div className="w-6" />
               <span className="flex-1 text-xs font-medium text-gray-400">Director</span>
-              <span className="text-xs font-medium text-gray-400 w-32 text-center">Weight</span>
+              <span className="text-xs font-medium text-gray-400 w-11 text-center">Active</span>
+              <span className="text-xs font-medium text-gray-400 w-16">Status</span>
               <div className="w-7" />
             </div>
 
             <div>
-              {ratios.map((ratio, index) => (
-                <RatioRow
+              {entries.map((entry, index) => (
+                <div
                   key={index}
-                  ratio={ratio}
-                  index={index}
-                  directors={directors}
-                  onChange={handleRatioChange}
-                  onRemove={removeRow}
-                  isOnly={ratios.length === 1}
-                />
+                  className={dragOverIndex === index ? 'border-t-2 border-blue-400' : ''}
+                >
+                  <DirectorSequenceRow
+                    entry={entry}
+                    index={index}
+                    directors={directors}
+                    onChange={handleEntryChange}
+                    onRemove={removeRow}
+                    isOnly={entries.length === 1}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
+                    onDragEnd={handleDragEnd}
+                    isDragging={dragIndex.current === index}
+                  />
+                </div>
               ))}
             </div>
 
@@ -428,9 +508,11 @@ export default function AllocationConfig() {
           </div>
 
           <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3">
-            <p className="text-xs font-medium text-blue-700 mb-1">Example: A=9, B=4, C=4, D=1</p>
+            <p className="text-xs font-medium text-blue-700 mb-1">How round robin works</p>
             <p className="text-xs text-blue-600">
-              Total = 18. Leads 1–9 → A, 10–13 → B, 14–17 → C, 18 → D. Then repeats.
+              With 4 enabled directors D1–D4: Lead 1 → D1, Lead 2 → D2, Lead 3 → D3, Lead 4 → D4,
+              Lead 5 → D1, and so on. Disabled directors are skipped automatically.
+              Adding a new director joins the rotation immediately without resetting past assignments.
             </p>
           </div>
 
@@ -469,7 +551,7 @@ export default function AllocationConfig() {
             <SequencePreview preview={preview} loading={previewLoading} />
             {!preview && !previewLoading && (
               <p className="text-xs text-gray-400 text-center py-4">
-                Configure ratios to see the sequence preview.
+                Add directors to see the upcoming sequence.
               </p>
             )}
           </div>
@@ -489,12 +571,13 @@ export default function AllocationConfig() {
                 </div>
               </div>
 
-              {stats.totalWeight > 0 && (
+              {stats.enabledCount > 0 && (
                 <div className="text-xs text-gray-400 mb-3">
                   Sequence position:{' '}
                   <span className="font-medium text-gray-600">
-                    {stats.cursorPosition} / {stats.totalWeight}
+                    {stats.pointerPosition + 1} / {stats.enabledCount}
                   </span>
+                  <span className="text-gray-300"> (pointer: {stats.currentPointer})</span>
                 </div>
               )}
 
@@ -525,7 +608,6 @@ export default function AllocationConfig() {
             </div>
           )}
 
-          {/* RunPanel — passes onAllocated so stats refresh after run */}
           <RunPanel
             unallocated={stats?.unallocated || 0}
             onAllocated={refreshStats}

@@ -2,24 +2,49 @@ const mongoose = require('mongoose');
 
 /**
  * AllocationConfig — singleton document (one per system).
- * Stores director ratios and the current position in the sequence.
  *
- * Example ratios: [{ director: <id>, weight: 9 }, { director: <id>, weight: 4 }]
- * Sequence cursor tracks how far through the current cycle we are.
+ * ROUND ROBIN MODE:
+ *   directors: ordered list of { director, enabled, sequenceOrder }
+ *   currentPointer: 0-based counter, incremented on every pick,
+ *                    taken % (enabled directors count) to find the
+ *                    next director in sequence.
+ *
+ * Example: directors = [D1, D2, D3, D4] (all enabled)
+ *   currentPointer=0 → D1, then pointer→1
+ *   currentPointer=1 → D2, then pointer→2
+ *   ...
+ *   currentPointer=4 → 4 % 4 = 0 → D1 again
+ *
+ * Disabled directors are filtered out before the modulo, so they're
+ * skipped automatically without shifting other directors' positions.
+ *
+ * New directors are appended to the array — existing currentPointer
+ * value is preserved (not reset), so prior allocation history is
+ * never disturbed; the new director simply joins the rotation.
  */
 const allocationConfigSchema = new mongoose.Schema(
   {
-    // One entry per director with a weight (ratio)
-    ratios: [
+    // Allocation strategy — currently only 'round_robin' is supported.
+    // Kept as a field for forward compatibility / explicit migration marker.
+    allocationMode: {
+      type: String,
+      enum: ['round_robin'],
+      default: 'round_robin',
+    },
+
+    // Ordered list of participating directors
+    directors: [
       {
         director: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-        weight:   { type: Number, required: true, min: 1, max: 100 },
+        enabled:       { type: Boolean, default: true },
+        sequenceOrder: { type: Number, required: true }, // 0-based position in rotation
       },
     ],
-    // Cursor: how many leads have been allocated in the current cycle (resets when cycle completes)
-    cursor: { type: Number, default: 0 },
-    // Total weight in the current config (sum of all weights — cached for fast lookup)
-    totalWeight: { type: Number, default: 0 },
+
+    // 0-based pointer — persists across restarts, never reset on
+    // add/remove/enable/disable. Only reset via explicit "Reset sequence".
+    currentPointer: { type: Number, default: 0 },
+
     // Is auto-allocation active?
     isActive: { type: Boolean, default: true },
   },

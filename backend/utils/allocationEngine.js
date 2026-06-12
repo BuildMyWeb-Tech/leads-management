@@ -1,86 +1,95 @@
 /**
- * Allocation Engine — ratio-based round-robin director assignment.
+ * Allocation Engine — Simple Sequential Round Robin.
  *
  * Algorithm:
- *   Given weights [A=9, B=4, C=4, D=1], total = 18.
- *   Build a cumulative boundary array: [9, 13, 17, 18].
- *   Cursor starts at 0 and increments per lead assigned.
- *   Position = cursor % totalWeight.
- *   Find which bucket the position falls into → that's the director.
+ *   directors = ordered list, filtered to enabled === true,
+ *   sorted by sequenceOrder.
  *
- * This produces the exact sequence:
- *   1-9   → A  (9 leads)
- *   10-13 → B  (4 leads)
- *   14-17 → C  (4 leads)
- *   18    → D  (1 lead)
- *   repeat infinitely — cursor wraps via modulo.
+ *   currentPointer is a 0-based counter, incremented atomically
+ *   on every pick. The director chosen is:
  *
- * Thread-safety: we use findOneAndUpdate with $inc on cursor atomically
- * to prevent double-allocation in concurrent requests.
+ *     enabled[ currentPointer % enabled.length ]
+ *
+ *   currentPointer keeps growing forever (not reset on cycle wrap —
+ *   the modulo handles wrapping). It IS preserved across:
+ *     - server restarts (stored in MongoDB)
+ *     - enabling/disabling directors
+ *     - adding/removing directors
+ *   It is ONLY reset via the explicit "Reset sequence" action.
+ *
+ * Concurrency:
+ *   findOneAndUpdate with $inc on currentPointer, returning the OLD
+ *   document (new: false), so the pre-increment value is used for
+ *   THIS pick — exactly the same atomic pattern as the previous engine.
  */
 
 const AllocationConfig = require('../models/AllocationConfig');
 
 /**
- * Pick next director based on current config.
- * Returns { directorId, configId } or null if no active config.
- * Atomically increments the cursor.
+ * Returns the enabled directors from a config, sorted by sequenceOrder.
  */
-const pickNextDirector = async () => {
-  // Load config with director references
-  const config = await AllocationConfig.findOne({ isActive: true });
-  if (!config || !config.ratios.length) return null;
-
-  const totalWeight = config.ratios.reduce((sum, r) => sum + r.weight, 0);
-  if (totalWeight === 0) return null;
-
-  // Atomically get current cursor and increment it
-  const updated = await AllocationConfig.findByIdAndUpdate(
-    config._id,
-    { $inc: { cursor: 1 }, $set: { totalWeight } },
-    { new: false } // return the OLD doc (before increment) so we use the pre-increment cursor
-  );
-
-  const position = (updated.cursor) % totalWeight;
-
-  // Walk the cumulative boundary to find the director
-  let cumulative = 0;
-  for (const ratio of config.ratios) {
-    cumulative += ratio.weight;
-    if (position < cumulative) {
-      return { directorId: ratio.director, configId: config._id };
-    }
-  }
-
-  // Fallback — should never reach here
-  return { directorId: config.ratios[0].director, configId: config._id };
+const getEnabledDirectors = (config) => {
+  return (config.directors || [])
+    .filter((d) => d.enabled)
+    .sort((a, b) => a.sequenceOrder - b.sequenceOrder);
 };
 
 /**
- * Preview the full allocation sequence for a given ratios array.
- * Used by the admin config UI to show what sequence will be generated.
- * Returns an array of director assignments (one per position in one cycle).
+ * Pick next director based on current config.
+ * Returns { directorId, configId } or null if no active config /
+ * no enabled directors.
+ * Atomically increments currentPointer.
  */
-const previewSequence = (ratios) => {
-  const totalWeight = ratios.reduce((sum, r) => sum + r.weight, 0);
-  if (totalWeight === 0) return [];
+const pickNextDirector = async () => {
+  const config = await AllocationConfig.findOne({ isActive: true });
+  if (!config || !config.directors.length) return null;
+
+  const enabled = getEnabledDirectors(config);
+  if (enabled.length === 0) return null; // all directors disabled
+
+  // Atomically increment currentPointer, get the PRE-increment doc
+  const before = await AllocationConfig.findByIdAndUpdate(
+    config._id,
+    { $inc: { currentPointer: 1 } },
+    { new: false }
+  );
+
+  const pointer = before.currentPointer; // pre-increment value used for THIS pick
+  const index   = pointer % enabled.length;
+  const chosen  = enabled[index];
+
+  return { directorId: chosen.director, configId: config._id };
+};
+
+/**
+ * Preview the allocation sequence for a given directors array.
+ *
+ * @param directors - [{ director, enabled, sequenceOrder }]
+ * @param startPointer - the currentPointer to start counting from
+ *                        (so the preview reflects "what happens next",
+ *                        not always starting at Lead 1 → first director)
+ * @param count - how many upcoming leads to preview (default 8)
+ *
+ * Returns an array of { leadNumber, director } where leadNumber is
+ * 1-based relative to startPointer (Lead 1 = the very next lead).
+ */
+const previewSequence = (directors, startPointer = 0, count = 8) => {
+  const enabled = (directors || [])
+    .filter((d) => d.enabled)
+    .sort((a, b) => a.sequenceOrder - b.sequenceOrder);
+
+  if (enabled.length === 0) return [];
 
   const sequence = [];
-  let cumulative = 0;
-  const boundaries = ratios.map((r) => {
-    cumulative += r.weight;
-    return { boundary: cumulative, director: r.director, weight: r.weight };
-  });
-
-  for (let pos = 0; pos < totalWeight; pos++) {
-    for (const b of boundaries) {
-      if (pos < b.boundary) {
-        sequence.push(b.director);
-        break;
-      }
-    }
+  for (let i = 0; i < count; i++) {
+    const pointer = startPointer + i;
+    const index   = pointer % enabled.length;
+    sequence.push({
+      leadNumber: i + 1,
+      director:   enabled[index].director,
+    });
   }
   return sequence;
 };
 
-module.exports = { pickNextDirector, previewSequence };
+module.exports = { pickNextDirector, previewSequence, getEnabledDirectors };

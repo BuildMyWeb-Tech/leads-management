@@ -1,25 +1,60 @@
 const AllocationConfig = require('../models/AllocationConfig');
-const audit = require('../utils/auditService');  // PHASE 10
+const audit = require('../utils/auditService');
 const Lead = require('../models/Lead');
 const User = require('../models/User');
-const { pickNextDirector, previewSequence } = require('../utils/allocationEngine');
+const { pickNextDirector, previewSequence, getEnabledDirectors } = require('../utils/allocationEngine');
+
+// ─────────────────────────────────────────────────────────────
+// Lazy migration: old configs had `ratios: [{ director, weight }]`.
+// New configs use `directors: [{ director, enabled, sequenceOrder }]`.
+// If a config has the old shape (ratios present, directors empty),
+// convert it once on read — preserving director ORDER from ratios.
+// currentPointer starts at 0 (old `cursor` semantics don't map
+// cleanly to round robin, so we start the new sequence fresh).
+// ─────────────────────────────────────────────────────────────
+const migrateIfNeeded = async (config) => {
+  const hasOldRatios   = Array.isArray(config.ratios) && config.ratios.length > 0;
+  const hasNewDirectors = Array.isArray(config.directors) && config.directors.length > 0;
+
+  if (hasOldRatios && !hasNewDirectors) {
+    config.directors = config.ratios.map((r, i) => ({
+      director:      r.director,
+      enabled:       true,
+      sequenceOrder: i,
+    }));
+    config.allocationMode = 'round_robin';
+    config.currentPointer = 0;
+    config.ratios = undefined; // drop old field
+    await config.save();
+  }
+  return config;
+};
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/allocation/config
-// Returns current config (with populated director names)
+// Returns current config (with populated director names).
+// Auto-migrates legacy ratios[] configs to directors[] on read.
 // Admin only
 // ─────────────────────────────────────────────────────────────
 const getConfig = async (req, res) => {
   try {
-    let config = await AllocationConfig.findOne()
-      .populate('ratios.director', 'name email isActive');
+    let config = await AllocationConfig.findOne();
 
     if (!config) {
-      // Bootstrap: create empty config on first call
-      config = await AllocationConfig.create({ ratios: [], cursor: 0, isActive: false });
+      config = await AllocationConfig.create({
+        directors: [],
+        currentPointer: 0,
+        isActive: false,
+        allocationMode: 'round_robin',
+      });
+    } else {
+      config = await migrateIfNeeded(config);
     }
 
-    res.json(config);
+    const populated = await AllocationConfig.findById(config._id)
+      .populate('directors.director', 'name email isActive');
+
+    res.json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -27,54 +62,70 @@ const getConfig = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────
 // PUT /api/allocation/config
-// Save ratios + isActive flag. Resets cursor to 0.
+// Save the director sequence (order + enabled) and isActive flag.
+// Does NOT reset currentPointer (Option A — seamless continuation).
 // Admin only
 // ─────────────────────────────────────────────────────────────
 const saveConfig = async (req, res) => {
   try {
-    const { ratios, isActive } = req.body;
+    const { directors, isActive } = req.body;
 
-    if (!Array.isArray(ratios)) {
-      return res.status(400).json({ message: 'ratios must be an array' });
+    if (!Array.isArray(directors)) {
+      return res.status(400).json({ message: 'directors must be an array' });
+    }
+    if (directors.length === 0) {
+      return res.status(400).json({ message: 'Add at least one director' });
     }
 
     // Validate each entry
-    for (const r of ratios) {
-      if (!r.director) return res.status(400).json({ message: 'Each ratio must have a director id' });
-      if (!r.weight || r.weight < 1 || r.weight > 100) {
-        return res.status(400).json({ message: 'Each weight must be between 1 and 100' });
+    for (const d of directors) {
+      if (!d.director) {
+        return res.status(400).json({ message: 'Each entry must have a director id' });
+      }
+      if (typeof d.sequenceOrder !== 'number' || d.sequenceOrder < 0) {
+        return res.status(400).json({ message: 'Each entry must have a valid sequenceOrder' });
       }
     }
 
     // Check for duplicate directors
-    const dirIds = ratios.map((r) => String(r.director));
+    const dirIds = directors.map((d) => String(d.director));
     if (new Set(dirIds).size !== dirIds.length) {
-      return res.status(400).json({ message: 'Duplicate directors in ratios — each director can appear only once' });
+      return res.status(400).json({ message: 'Duplicate directors — each director can appear only once' });
     }
 
-    const totalWeight = ratios.reduce((sum, r) => sum + Number(r.weight), 0);
+    // Require at least one ENABLED director when isActive is true
+    const enabledCount = directors.filter((d) => d.enabled !== false).length;
+    if ((isActive !== false) && enabledCount === 0) {
+      return res.status(400).json({ message: 'At least one director must be enabled' });
+    }
 
     let config = await AllocationConfig.findOne();
+    const cleaned = directors.map((d) => ({
+      director:      d.director,
+      enabled:       d.enabled !== false,
+      sequenceOrder: Number(d.sequenceOrder),
+    }));
+
     if (config) {
-      config.ratios     = ratios.map((r) => ({ director: r.director, weight: Number(r.weight) }));
-      config.isActive   = isActive !== undefined ? isActive : config.isActive;
-      config.cursor     = 0; // reset sequence on config change
-      config.totalWeight = totalWeight;
+      config.directors      = cleaned;
+      config.allocationMode = 'round_robin';
+      config.isActive       = isActive !== undefined ? isActive : config.isActive;
+      // currentPointer is intentionally NOT modified — Option A
       await config.save();
     } else {
       config = await AllocationConfig.create({
-        ratios: ratios.map((r) => ({ director: r.director, weight: Number(r.weight) })),
-        isActive: isActive !== undefined ? isActive : true,
-        cursor: 0,
-        totalWeight,
+        directors:      cleaned,
+        allocationMode: 'round_robin',
+        isActive:       isActive !== undefined ? isActive : true,
+        currentPointer: 0,
       });
     }
 
     const populated = await AllocationConfig.findById(config._id)
-      .populate('ratios.director', 'name email isActive');
+      .populate('directors.director', 'name email isActive');
 
     res.json(populated);
-    audit.allocationConfigChanged(req, ratios);
+    audit.allocationConfigChanged(req, cleaned);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -82,40 +133,52 @@ const saveConfig = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/allocation/preview
-// Returns the sequence preview for given ratios (no DB change)
+// Returns the upcoming Lead N → Director sequence for given
+// directors[] (no DB change). Starts from the CURRENT
+// currentPointer so the preview matches what will actually happen.
 // Admin only
 // ─────────────────────────────────────────────────────────────
 const previewConfig = async (req, res) => {
   try {
-    const { ratios } = req.body;
-    if (!Array.isArray(ratios) || ratios.length === 0) {
-      return res.status(400).json({ message: 'ratios array required' });
+    const { directors, count } = req.body;
+    if (!Array.isArray(directors) || directors.length === 0) {
+      return res.status(400).json({ message: 'directors array required' });
+    }
+
+    const enabled = directors.filter((d) => d.enabled !== false);
+    if (enabled.length === 0) {
+      return res.status(400).json({ message: 'At least one director must be enabled to preview' });
     }
 
     // Fetch director names
-    const dirIds = ratios.map((r) => r.director);
-    const directors = await User.find({ _id: { $in: dirIds } }).select('name');
-    const nameMap = Object.fromEntries(directors.map((d) => [String(d._id), d.name]));
+    const dirIds = directors.map((d) => d.director);
+    const users  = await User.find({ _id: { $in: dirIds } }).select('name');
+    const nameMap = Object.fromEntries(users.map((u) => [String(u._id), u.name]));
 
-    const seq = previewSequence(ratios.map((r) => ({ ...r, weight: Number(r.weight) })));
-    const labeled = seq.map((id) => nameMap[String(id)] || id);
-    const totalWeight = ratios.reduce((sum, r) => sum + Number(r.weight), 0);
+    // Use the CURRENT pointer so the preview shows what happens next
+    const existing = await AllocationConfig.findOne();
+    const startPointer = existing ? existing.currentPointer : 0;
 
-    // Build summary: { director: name, from: 1, to: 9, count: 9 }
-    const summary = [];
-    let pos = 1;
-    for (const r of ratios) {
-      summary.push({
-        director: nameMap[String(r.director)] || r.director,
-        weight: Number(r.weight),
-        from: pos,
-        to: pos + Number(r.weight) - 1,
-        pct: Math.round((Number(r.weight) / totalWeight) * 100),
-      });
-      pos += Number(r.weight);
-    }
+    const cleaned = directors.map((d) => ({
+      director:      d.director,
+      enabled:       d.enabled !== false,
+      sequenceOrder: Number(d.sequenceOrder),
+    }));
 
-    res.json({ sequence: labeled, summary, totalWeight });
+    const previewCount = count ? Math.min(Number(count), 50) : 8;
+    const seq = previewSequence(cleaned, startPointer, previewCount);
+
+    const sequence = seq.map((item) => ({
+      leadNumber: item.leadNumber,
+      director:   nameMap[String(item.director)] || String(item.director),
+      directorId: String(item.director),
+    }));
+
+    res.json({
+      sequence,
+      enabledCount:  enabled.length,
+      startPointer,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -128,13 +191,15 @@ const previewConfig = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 const runAllocation = async (req, res) => {
   try {
-    const { count } = req.body; // how many leads to allocate (default: all New)
+    const { count } = req.body;
     const config = await AllocationConfig.findOne({ isActive: true });
-    if (!config || !config.ratios.length) {
-      return res.status(400).json({ message: 'No active allocation config found. Configure ratios first.' });
+    if (!config || !config.directors.length) {
+      return res.status(400).json({ message: 'No active allocation config found. Configure director sequence first.' });
+    }
+    if (getEnabledDirectors(config).length === 0) {
+      return res.status(400).json({ message: 'All directors are disabled. Enable at least one to run allocation.' });
     }
 
-    // Fetch unallocated leads (status New, no assignedDirector)
     const query = { status: 'New', assignedDirector: null };
     const limit = count ? Number(count) : 1000;
     const unallocated = await Lead.find(query).limit(limit).lean();
@@ -190,8 +255,10 @@ const runAllocation = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 const getAllocationStats = async (req, res) => {
   try {
-    const config = await AllocationConfig.findOne()
-      .populate('ratios.director', 'name');
+    let config = await AllocationConfig.findOne()
+      .populate('directors.director', 'name');
+
+    if (config) config = await migrateIfNeeded(config);
 
     const unallocated = await Lead.countDocuments({ status: 'New', assignedDirector: null });
     const allocated   = await Lead.countDocuments({ assignedDirector: { $ne: null } });
@@ -206,13 +273,16 @@ const getAllocationStats = async (req, res) => {
       { $sort: { count: -1 } },
     ]);
 
+    const enabledCount = config ? getEnabledDirectors(config).length : 0;
+
     res.json({
       config: config || null,
       unallocated,
       allocated,
       directorBreakdown,
-      cursorPosition: config ? config.cursor % Math.max(config.totalWeight, 1) : 0,
-      totalWeight: config?.totalWeight || 0,
+      currentPointer: config?.currentPointer || 0,
+      enabledCount,
+      pointerPosition: enabledCount > 0 ? (config.currentPointer % enabledCount) : 0,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -221,12 +291,13 @@ const getAllocationStats = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/allocation/reset-cursor
-// Reset the sequence cursor to 0 (start fresh cycle). Admin only.
+// Reset currentPointer to 0 (start the rotation fresh from the
+// first enabled director in sequenceOrder). Admin only.
 // ─────────────────────────────────────────────────────────────
 const resetCursor = async (req, res) => {
   try {
-    await AllocationConfig.updateOne({}, { $set: { cursor: 0 } });
-    res.json({ message: 'Allocation cursor reset to 0' });
+    await AllocationConfig.updateOne({}, { $set: { currentPointer: 0 } });
+    res.json({ message: 'Allocation pointer reset to position 1' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
