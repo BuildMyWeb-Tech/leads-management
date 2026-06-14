@@ -3,16 +3,39 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 /**
  * ImageDropZone — drag-and-drop + click-to-upload + paste from clipboard.
  *
- * Mobile behaviour:
- *   - NO capture= attribute → Android shows "Camera / Gallery" choice sheet
+ * MULTI-FILE SUPPORT (Phase 11A):
+ *   - Drag-and-drop: ALL dropped image files are collected and passed
+ *     to onFile as an array (e.dataTransfer.files, not just [0]).
+ *   - Clipboard paste: ALL pasted image items are collected and passed
+ *     to onFile as an array (handles pasting multiple screenshots at once).
+ *   - Gallery picker: <input multiple> — already supported, passes a
+ *     FileList → converted to array.
+ *   - Camera input: still single-file (capture="environment" — a device
+ *     camera can only produce one photo per shot), passed as a single File.
+ *
+ * onFile signature: onFile(file | file[])
+ *   Callers (OcrCapture) normalize via addFiles(), which already does
+ *   `Array.isArray(files) ? files : [files]` — no caller-side changes
+ *   needed beyond that existing normalization.
+ *
+ * Non-image files are filtered out silently when part of a multi-file
+ * drop/paste (so e.g. dropping a screenshot + a PDF together still
+ * imports the screenshot). A single non-image file (drag or paste of
+ * exactly one non-image item) still shows the alert, preserving the
+ * original single-file behaviour.
+ *
+ * Mobile behaviour unchanged:
+ *   - NO capture= attribute on gallery input → Android shows
+ *     "Camera / Gallery" choice sheet
  *   - accept="image/*" lets both camera and gallery work
- *   - Two buttons: one for gallery, one explicitly for camera
+ *   - Two buttons: one for gallery (multi), one explicitly for camera (single)
  */
 export default function ImageDropZone({ onFile, disabled }) {
   const [dragOver, setDragOver] = useState(false);
-  const galleryRef = useRef(null); // opens gallery / file picker
-  const cameraRef  = useRef(null); // opens camera directly
+  const galleryRef = useRef(null); // opens gallery / file picker (multi)
+  const cameraRef  = useRef(null); // opens camera directly (single)
 
+  // ── Single-file handler (camera input, single drop/paste) ────
   const handleFile = useCallback((file) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
@@ -22,18 +45,56 @@ export default function ImageDropZone({ onFile, disabled }) {
     onFile(file);
   }, [onFile]);
 
+  // ── Multi-file handler (gallery multi-select, multi drop/paste) ─
+  // Filters to images only. If the result is a single file, still
+  // passes it as a single File (not a 1-element array) so existing
+  // single-file flows (e.g. preview thumbnail logic) keep working —
+  // OcrCapture.addFiles() normalizes either shape anyway, but this
+  // keeps behaviour identical to before for the single-file case.
+  const handleFiles = useCallback((fileList) => {
+    const files = Array.from(fileList || []).filter((f) => f.type.startsWith('image/'));
+
+    if (files.length === 0) {
+      // Nothing valid — if exactly one non-image file was provided,
+      // surface the same alert as the single-file path for parity.
+      if (fileList && fileList.length === 1) {
+        alert('Please upload an image file (PNG, JPG, WEBP)');
+      }
+      return;
+    }
+
+    if (files.length === 1) {
+      onFile(files[0]);
+    } else {
+      onFile(files);
+    }
+  }, [onFile]);
+
+  // ── Drag and drop — now collects ALL dropped files ────────────
   const onDrop = (e) => {
     e.preventDefault();
     setDragOver(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleFile(file);
+    if (disabled) return;
+    handleFiles(e.dataTransfer.files);
   };
 
+  // ── Clipboard paste — now collects ALL pasted image items ──────
   const onPaste = useCallback((e) => {
-    const items   = Array.from(e.clipboardData?.items || []);
-    const imgItem = items.find((i) => i.type.startsWith('image/'));
-    if (imgItem) handleFile(imgItem.getAsFile());
-  }, [handleFile]);
+    if (disabled) return;
+    const items  = Array.from(e.clipboardData?.items || []);
+    const images = items
+      .filter((i) => i.type.startsWith('image/'))
+      .map((i) => i.getAsFile())
+      .filter(Boolean);
+
+    if (images.length === 0) return;
+
+    if (images.length === 1) {
+      handleFile(images[0]);
+    } else {
+      onFile(images);
+    }
+  }, [disabled, handleFile, onFile]);
 
   useEffect(() => {
     document.addEventListener('paste', onPaste);
@@ -59,24 +120,26 @@ export default function ImageDropZone({ onFile, disabled }) {
     >
       {/* Hidden inputs */}
 
-      {/* Gallery / file picker — NO capture attribute → shows system file picker */}
+      {/* Gallery / file picker — multi-select, NO capture attribute
+          → shows system file picker, supports selecting many images */}
       <input
         ref={galleryRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
-        onChange={(e) => handleFile(e.target.files?.[0])}
+        onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
         disabled={disabled}
       />
 
-      {/* Camera input — capture="environment" forces back camera only */}
+      {/* Camera input — single shot, capture="environment" forces back camera */}
       <input
         ref={cameraRef}
         type="file"
         accept="image/*"
         capture="environment"
         className="hidden"
-        onChange={(e) => handleFile(e.target.files?.[0])}
+        onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ''; }}
         disabled={disabled}
       />
 
@@ -93,23 +156,23 @@ export default function ImageDropZone({ onFile, disabled }) {
       {/* Text */}
       <div className="text-center">
         <p className="text-sm font-semibold text-gray-700">
-          {dragOver ? 'Drop image here' : 'Upload screenshot or image'}
+          {dragOver ? 'Drop image(s) here' : 'Upload screenshot or image'}
         </p>
         <p className="text-xs text-gray-400 mt-1 hidden sm:block">
-          Drag & drop, click a button below, or{' '}
+          Drag & drop one or more images, click a button below, or{' '}
           <kbd className="bg-gray-100 border border-gray-200 rounded px-1.5 py-0.5 text-xs font-mono">
             Ctrl+V
           </kbd>{' '}
           to paste
         </p>
         <p className="text-xs text-gray-400 mt-1">
-          PNG · JPG · WEBP · Screenshots · WhatsApp contacts
+          PNG · JPG · WEBP · Screenshots · WhatsApp contacts · Multiple files supported
         </p>
       </div>
 
-      {/* Action buttons — explicit gallery vs camera */}
+      {/* Action buttons — explicit gallery (multi) vs camera (single) */}
       <div className="flex gap-3 flex-wrap justify-center">
-        {/* Gallery button — main action, opens system file picker */}
+        {/* Gallery button — main action, opens system file picker (multi-select) */}
         <button
           type="button"
           disabled={disabled}
@@ -125,7 +188,7 @@ export default function ImageDropZone({ onFile, disabled }) {
           Choose from Gallery
         </button>
 
-        {/* Camera button — directly opens camera */}
+        {/* Camera button — directly opens camera (single shot) */}
         <button
           type="button"
           disabled={disabled}
@@ -147,7 +210,7 @@ export default function ImageDropZone({ onFile, disabled }) {
 
       {/* Desktop hint */}
       <p className="text-xs text-gray-300 hidden sm:block">
-        or drag & drop an image anywhere above
+        or drag & drop one or more images anywhere above
       </p>
     </div>
   );

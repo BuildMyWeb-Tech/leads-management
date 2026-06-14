@@ -2,6 +2,49 @@ const Lead = require('../models/Lead');
 const { pickNextDirector } = require('../utils/allocationEngine');
 const audit = require('../utils/auditService');   // FIXED: was missing, caused ERR_HTTP_HEADERS_SENT
 
+// ── Phase 11C — name validation (mirrors frontend ocrEngine.js) ─
+// Defensive re-check on the server: a client could call /ocr/import
+// directly (bypassing the frontend extractor), so the same blacklist
+// and validation rules are re-applied here before insert.
+const NO_NAME = 'No Name';
+
+const NAME_BLACKLIST = [
+  'Settings', 'Edit', 'Share', 'Contacts', 'Unknown', 'Back', 'Done',
+  'Cancel', 'More', 'Search', 'Call', 'Message', 'Add', 'Menu',
+  'Recent', 'Home', 'Chats', 'Status', 'Calls', 'WhatsApp', 'Telegram',
+  'Truecaller',
+];
+const NAME_BLACKLIST_PHRASES = [
+  'add contact',
+  'block & report spam',
+  'block and report spam',
+  'help & feedback',
+  'help and feedback',
+  'contact info from phone',
+  'lookup',
+];
+const BLACKLIST_SET = new Set(NAME_BLACKLIST.map((w) => w.toLowerCase()));
+
+// Returns a valid display name, or NO_NAME if the input fails validation:
+//   - 2–50 chars after trim
+//   - contains at least one letter
+//   - not numbers-only / symbols-only
+//   - not an exact blacklist word or phrase match
+const sanitiseName = (raw) => {
+  const t = String(raw || '').trim();
+
+  if (t.length < 2 || t.length > 50) return NO_NAME;
+  if (!/[a-zA-Z]/.test(t)) return NO_NAME;          // must contain letters
+  if (/^\d+$/.test(t)) return NO_NAME;               // numbers only
+  if (/^[^a-zA-Z0-9]+$/.test(t)) return NO_NAME;     // symbols only
+
+  const lower = t.toLowerCase();
+  if (BLACKLIST_SET.has(lower)) return NO_NAME;
+  if (NAME_BLACKLIST_PHRASES.includes(lower)) return NO_NAME;
+
+  return t;
+};
+
 /**
  * POST /api/ocr/check-duplicates
  */
@@ -83,7 +126,10 @@ const importOcrLeads = async (req, res) => {
         continue;
       }
       const leadData = {
-        name:   lead.name   || 'Unknown',
+        // Phase 11C: re-validate name server-side. Frontend already
+        // sends "No Name" for unrecognised lines, but a direct API
+        // call could send "Settings" etc — sanitiseName() catches that.
+        name:   sanitiseName(lead.name),
         phone:  lead._norm,
         source: lead.source || 'Other',
         notes:  lead.notes  || '',

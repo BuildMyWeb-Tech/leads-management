@@ -82,10 +82,11 @@ const [ocrStage, setOcrStage] = useState('');
 const [allLeads, setAllLeads] = useState([]);
 const [showModal, setShowModal] = useState(false);
 const [importedCount, setImportedCount] = useState(0);
-const [currentImage, setCurrentImage] = useState(null);
 
 const multiInputRef = useRef(null);
 
+// ── Core queue-add logic (unchanged) ──────────────────────────
+// Accepts either a single File or an array of Files.
 const addFiles = useCallback((files) => {
   const arr = Array.isArray(files) ? files : [files];
 
@@ -133,9 +134,15 @@ useEffect(() => {
   const removeFromQueue = (id) =>
     setQueue((prev) => prev.filter((i) => i.id !== id));
 
-  const handleSingleFile = useCallback((file) => {
-    addFiles([file]);
-    setCurrentImage(URL.createObjectURL(file));
+  // ── ImageDropZone callback — receives EITHER a single File OR an
+  // array of Files (drag-drop / paste / gallery multi-select all
+  // route here now). addFiles() already normalizes both shapes via
+  // Array.isArray(), so this is a thin pass-through — kept as its
+  // own function (rather than passing addFiles directly) in case
+  // future per-source handling is needed without touching the
+  // ImageDropZone contract again.
+  const handleDropZoneFiles = useCallback((files) => {
+    addFiles(files);
   }, [addFiles]);
 
   const handleMultiFiles = (e) => {
@@ -217,7 +224,6 @@ const handleReset = () => {
   setStage(STAGE.IDLE);
   setOcrProgress(0);
   setOcrStage('');
-  setCurrentImage(null);
   setShowModal(false);
   setImportedCount(0);
 };
@@ -269,7 +275,7 @@ const handleReset = () => {
         ) : (
           <div className="space-y-4">
             {stage !== STAGE.LOADING && (
-              <ImageDropZone onFile={handleSingleFile} disabled={stage === STAGE.LOADING} />
+              <ImageDropZone onFile={handleDropZoneFiles} disabled={stage === STAGE.LOADING} />
             )}
 
             {stage === STAGE.LOADING && (
@@ -290,7 +296,6 @@ const handleReset = () => {
                       multiple
                       className="hidden"
                       onChange={handleMultiFiles}
-                      capture="environment"
                     />
                     <button
                       onClick={() => multiInputRef.current?.click()}
@@ -362,39 +367,6 @@ const handleReset = () => {
                 </div>
               </div>
             )}
-
-            {/* {stage === STAGE.IDLE && queue.length === 0 && (
-              <div className="card">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                  What works best
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { icon: '📱', title: 'WhatsApp contacts',  desc: 'Contact card with name & number' },
-                    { icon: '📋', title: 'Contact card',       desc: 'Screenshot from any app' },
-                    { icon: '📢', title: 'Ad screenshots',     desc: 'Property ads with phone numbers' },
-                    { icon: '🖼️', title: 'Multiple contacts',  desc: 'Group screenshot' },
-                  ].map((tip) => (
-                    <div key={tip.title} className="bg-gray-50 rounded-xl p-3">
-                      <span className="text-xl">{tip.icon}</span>
-                      <p className="text-xs font-semibold text-gray-700 mt-1">{tip.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{tip.desc}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 bg-blue-50 border border-blue-100 rounded-xl p-3">
-                  <p className="text-xs font-semibold text-blue-700 mb-1">
-                    💡 Tips for best results
-                  </p>
-                  <ul className="text-xs text-blue-600 space-y-0.5 list-disc list-inside">
-                    <li>Use high-resolution, unblurred screenshots</li>
-                    <li>Ensure phone numbers are clearly visible</li>
-                    <li>Can scan multiple images at once</li>
-                    <li>Duplicate numbers are automatically detected</li>
-                  </ul>
-                </div>
-              </div>
-            )} */}
           </div>
         )}
       </div>

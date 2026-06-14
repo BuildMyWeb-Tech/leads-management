@@ -1,5 +1,3 @@
-C:\Users\ajaik\Desktop\leads-management>node show-structure.js
-📁 .git
 📄 .gitignore
 📁 backend
    📄 .env

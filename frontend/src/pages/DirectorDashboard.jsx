@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { STATUS_BADGE_CLASSES } from '../constants/leadConstants';
@@ -51,6 +51,7 @@ function FollowUpItem({ lead, onStatusSave }) {
 
 export default function DirectorDashboard() {
   const { user } = useAuth();
+  const location = useLocation();
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
@@ -78,6 +79,28 @@ export default function DirectorDashboard() {
       api.get('/users?role=director').then((r) => setDirectors(r.data));
     }
   }, [user.role]);
+
+  // ── Phase 11E: auto-apply director filter from ?director=<name> ──
+  // Dashboard director cards link to /director-dashboard?director=Director%201.
+  // Once `directors` is loaded, match the query param against director
+  // names (case-insensitive) and select that director's _id in the
+  // existing dropdown — fetchData() then picks it up via selectedDir
+  // exactly as if the admin had chosen it manually.
+  useEffect(() => {
+    if (user.role !== 'admin') return;
+    if (directors.length === 0) return;
+
+    const params = new URLSearchParams(location.search);
+    const directorName = params.get('director');
+    if (!directorName) return;
+
+    const match = directors.find(
+      (d) => d.name?.toLowerCase() === directorName.toLowerCase()
+    );
+    if (match && match._id !== selectedDir) {
+      setSelectedDir(match._id);
+    }
+  }, [user.role, directors, location.search]);
 
   const handleStatusSave = async (leadId, { status, notes }) => {
     try {

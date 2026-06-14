@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { LEAD_STATUSES, STATUS_BAR_COLORS, STATUS_BADGE_CLASSES } from '../constants/leadConstants';
+import KpiCard from '../components/director/KpiCard';
 import PwaStatusCard from '../components/pwa/PwaStatusCard';
 
 function StatCard({ label, value, color = 'text-gray-900', sub, icon }) {
@@ -131,6 +132,40 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* ── Director summary cards — Admin only (Phase 11D) ──
+           One KpiCard per director showing Total Leads.
+           Each card links to the Director Dashboard, pre-filtered
+           to that director (Phase 11E will read this query param).
+           Reuses stats.directorStats from /leads/dashboard/stats —
+           no new API call. ────────────────────────────────── */}
+      {user?.role === 'admin' && (stats?.directorStats || []).length > 0 && (
+        <div className="mb-5">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3">Directors</h3>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {stats.directorStats.map((d) => (
+              <Link
+                key={d._id}
+                to={`/director-dashboard?director=${encodeURIComponent(d.name)}`}
+                className="block hover:opacity-80 transition-opacity"
+              >
+                <KpiCard
+                  label={d.name}
+                  value={d.count}
+                  sub="Total Leads"
+                  color="text-indigo-600"
+                  icon={
+                    <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center
+                                    justify-center text-sm font-bold text-indigo-700">
+                      {d.name?.charAt(0)}
+                    </div>
+                  }
+                />
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Main grid — stacks on mobile ─────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
@@ -214,34 +249,6 @@ export default function Dashboard() {
               })}
             </div>
           </div>
-
-          {/* Director performance — Admin only */}
-          {user?.role === 'admin' && (stats?.directorStats || []).length > 0 && (
-            <div className="card flex-1">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">Leads per director</h3>
-              <div className="space-y-2">
-                {stats.directorStats.map((d) => {
-                  const pct = total > 0 ? Math.round((d.count / total) * 100) : 0;
-                  return (
-                    <div key={d._id} className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center
-                                      text-xs font-semibold text-blue-700 flex-shrink-0">
-                        {d.name?.charAt(0)}
-                      </div>
-                      <span className="text-xs text-gray-700 flex-1 truncate">{d.name}</span>
-                      <div className="w-16 bg-gray-100 rounded-full h-1.5">
-                        <div className="bg-indigo-400 h-1.5 rounded-full"
-                          style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="text-xs font-medium text-gray-600 w-6 text-right">
-                        {d.count}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -256,9 +263,9 @@ export default function Dashboard() {
                   ? <span className="text-green-600 font-medium">● Active</span>
                   : <span className="text-gray-400">○ Inactive</span>
                 }
-                {allocStats.totalWeight > 0 && (
+                {allocStats.enabledCount > 0 && (
                   <span className="ml-2">
-                    Cycle position: {allocStats.cursorPosition} / {allocStats.totalWeight}
+                    Sequence position: {allocStats.pointerPosition + 1} / {allocStats.enabledCount}
                   </span>
                 )}
               </p>

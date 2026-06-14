@@ -8,6 +8,15 @@
  *   - 4+6 split:            9876-543210
  *   - With +91/91/0 prefix: +91 79046 54620
  *   - Separators: space, dash, dot
+ *
+ * PHASE 11C — Blacklist + name validation:
+ *   Android contact-card screenshots include UI chrome lines like
+ *   "Settings", "Add contact", "Call", "Message", "Block & report spam"
+ *   adjacent to the actual contact name/phone. These were sometimes
+ *   picked up as the lead's name. Now filtered via NAME_BLACKLIST +
+ *   stricter isLikelyName() validation. If no valid name line is found
+ *   near a phone match, the lead's name is set to the literal string
+ *   "No Name" (per spec) instead of incorrect UI text.
  */
 
 import Tesseract from 'tesseract.js';
@@ -57,14 +66,75 @@ const PHONE_REGEX = new RegExp(
   'g'
 );
 
-// ── Name cleaning ─────────────────────────────────────────────
+// ── Fallback name when no valid name line is found ────────────
+export const NO_NAME = 'No Name';
+
+// ── Name blacklist — UI chrome words from Android contact cards ─
+// Exact match, case-insensitive, after trimming whitespace.
+// Exported so backend can apply the same defensive check.
+export const NAME_BLACKLIST = [
+  'Settings', 'Edit', 'Share', 'Contacts', 'Unknown', 'Back', 'Done',
+  'Cancel', 'More', 'Search', 'Call', 'Message', 'Add', 'Menu',
+  'Recent', 'Home', 'Chats', 'Status', 'Calls', 'WhatsApp', 'Telegram',
+  'Truecaller',
+];
+
+// Multi-word UI phrases that also need blacklisting (not single tokens,
+// so they don't fit a simple exact-match-on-one-word list, but appear
+// verbatim as full lines in contact-card screenshots).
+const NAME_BLACKLIST_PHRASES = [
+  'add contact',
+  'block & report spam',
+  'block and report spam',
+  'help & feedback',
+  'help and feedback',
+  'contact info from phone',
+  'lookup',
+];
+
+const BLACKLIST_SET = new Set(NAME_BLACKLIST.map((w) => w.toLowerCase()));
+
+// ── Name validation (Phase 11C rules) ──────────────────────────
+// A line is a likely name if:
+//   - 2–50 characters (after trim)
+//   - contains at least one letter
+//   - not numbers-only
+//   - not symbols-only
+//   - not an exact blacklist match (single word or known UI phrase)
+//   - doesn't match existing call/whatsapp/contact noise patterns
 const isLikelyName = (line) => {
-  const t = line.trim();
-  if (!t || t.length < 2 || t.length > 60) return false;
-  if (/^\d+$/.test(t))                     return false;
-  if (/https?:|www\.|@/.test(t))           return false;
-  if (/^[^a-zA-Z]/.test(t) && t.length < 4) return false;
+  const t = (line || '').trim();
+
+  if (t.length < 2 || t.length > 50) return false;
+
+  // Must contain at least one letter
+  if (!/[a-zA-Z]/.test(t)) return false;
+
+  // Not numbers-only (redundant with above, but explicit per spec)
+  if (/^\d+$/.test(t)) return false;
+
+  // Not symbols-only (no letters/digits at all)
+  if (/^[^a-zA-Z0-9]+$/.test(t)) return false;
+
+  // URLs / emails are never names
+  if (/https?:|www\.|@/.test(t)) return false;
+
+  const lower = t.toLowerCase();
+
+  // Exact blacklist match (single-word UI chrome)
+  if (BLACKLIST_SET.has(lower)) return false;
+
+  // Exact blacklist phrase match (multi-word UI chrome)
+  if (NAME_BLACKLIST_PHRASES.includes(lower)) return false;
+
+  // Existing noise-word heuristic (call/whatsapp/contact/etc as part of a line)
   if (/\b(call|whatsapp|contact|no\.|number|ph|mobile|msg|search|showing)\b/i.test(t)) return false;
+
+  // Single short non-letter-leading token (e.g. "1", "+", "—") already
+  // covered by length check above, but guard short symbol-prefixed
+  // junk like ">1" etc.
+  if (/^[^a-zA-Z]/.test(t) && t.length < 4) return false;
+
   return true;
 };
 
@@ -116,6 +186,17 @@ export const extractLeads = (rawText) => {
       name = cleanName(lines[lineIdx + 1]);
     }
 
+    // Final guard: if cleanName() somehow produced a blacklisted result
+    // (e.g. case variations not caught above), discard it too.
+    if (name && BLACKLIST_SET.has(name.toLowerCase())) {
+      name = '';
+    }
+
+    // Fallback: no valid name line found near this phone → "No Name"
+    if (!name) {
+      name = NO_NAME;
+    }
+
     // Extra context for notes
     PHONE_REGEX.lastIndex = 0;
     const context = [
@@ -125,13 +206,21 @@ export const extractLeads = (rawText) => {
       lineIdx < lines.length - 1 ? lines[lineIdx + 1] : '',
     ]
       .filter(Boolean)
-      .filter((l) => { PHONE_REGEX.lastIndex = 0; return !PHONE_REGEX.test(l) && l !== name; })
+      .filter((l) => {
+        PHONE_REGEX.lastIndex = 0;
+        if (PHONE_REGEX.test(l)) return false;
+        if (l === name) return false;
+        // Strip blacklisted UI chrome lines from context too
+        const lc = l.trim().toLowerCase();
+        if (BLACKLIST_SET.has(lc) || NAME_BLACKLIST_PHRASES.includes(lc)) return false;
+        return true;
+      })
       .join(' | ')
       .slice(0, 120);
 
     leads.push({
       id:       `ocr-${phone}`,
-      name:     name || '',
+      name,
       phone,
       extra:    context || '',
       selected: true,
