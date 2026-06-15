@@ -139,32 +139,42 @@ function SequencePreview({ preview, loading }) {
         reset and the cycle repeats.
       </p>
 
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         {sequence.map((item) => (
           <div key={item.leadNumber}>
             {item.cycleReset && item.leadNumber > 1 && (
               <div className="flex items-center gap-2 my-2">
                 <div className="flex-1 border-t border-dashed border-gray-200" />
-                <span className="text-xs text-gray-400 font-medium px-1">
+                <span className="text-xs text-gray-400 font-medium px-1 whitespace-nowrap">
                   cycle reset — quotas refilled
                 </span>
                 <div className="flex-1 border-t border-dashed border-gray-200" />
               </div>
             )}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400 w-16 flex-shrink-0">
-                Lead {item.leadNumber}
-              </span>
-              <svg className="w-3 h-3 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-              </svg>
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full
-                text-xs font-medium truncate ${colorMap[item.directorId]}`}>
-                {item.director}
-              </span>
-              <span className="text-xs text-gray-400 ml-auto truncate">
-                {item.remainingAfter.map((r) => `${r.director}=${r.remaining}`).join(' ')}
-              </span>
+            {/* Two-line row: Lead N -> Director on top, full
+                remaining-quota breakdown wraps freely underneath.
+                Avoids the cramped single-line layout where the
+                countdown text got clipped in a narrow column. */}
+            <div className="rounded-lg bg-gray-50/60 px-2.5 py-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 w-14 flex-shrink-0">
+                  Lead {item.leadNumber}
+                </span>
+                <svg className="w-3 h-3 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                </svg>
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full
+                  text-xs font-medium whitespace-nowrap ${colorMap[item.directorId]}`}>
+                  {item.director}
+                </span>
+              </div>
+              <div className="mt-1 pl-[4.75rem] flex flex-wrap gap-x-3 gap-y-0.5">
+                {item.remainingAfter.map((r) => (
+                  <span key={r.directorId || r.director} className="text-xs text-gray-400 whitespace-nowrap">
+                    {r.director}=<span className="font-medium text-gray-600">{r.remaining}</span>
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         ))}
@@ -336,7 +346,6 @@ export default function AllocationConfig() {
     setPreviewLoading(true);
     try {
       const payload = valid.map((e, i) => ({ ...e, sequenceOrder: i, quota: Number(e.quota) || 0 }));
-
       const { data } = await api.post('/allocation/preview', { directors: payload, count: 18 });
       setPreview(data);
     } catch { setPreview(null); }
@@ -469,10 +478,10 @@ export default function AllocationConfig() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 items-start">
 
         {/* ── Left: Config editor ───────────────── */}
-        <div className="lg:col-span-3 space-y-5">
+        <div className="lg:col-span-2 space-y-5">
 
           {/* Active toggle */}
           <div className="card flex items-center justify-between">
@@ -599,7 +608,7 @@ export default function AllocationConfig() {
         </div>
 
         {/* ── Right: Preview + stats ────────────── */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-3 space-y-5">
 
           <div className="card">
             <h3 className="text-sm font-semibold text-gray-800 mb-3">Live preview</h3>
