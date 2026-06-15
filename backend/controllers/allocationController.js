@@ -374,6 +374,18 @@ const runAllocation = async (req, res) => {
       summary,
     });
     audit.allocationRun(req, results.length, summary);
+
+    // Director_View — regenerate when "Run allocation" assigns
+    // directors to previously-unallocated leads, so they appear in
+    // the grouped report immediately (same reasoning as createLead:
+    // newly-allocated leads should be visible without waiting for a
+    // later bulkAssign or manual sync). Skipped if nothing was
+    // allocated.
+    if (results.length > 0) {
+      regenerateDirectorView().catch((e) =>
+        console.error('[RunAllocation] Director_View regen failed:', e.message)
+      );
+    }
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -51,9 +51,15 @@ const getLeads = async (req, res) => {
 // Manual lead creation. Auto-allocation uses the Adaptive
 // Quota-Based Round Robin engine (pickNextDirector). On success,
 // the new lead is appended to Operational_Leads (fast path, via
-// syncToSheets 'create'). Director_View is NOT regenerated here —
-// per client requirement, individual manual lead creation must not
-// trigger a Director_View rebuild.
+// syncToSheets 'create').
+//
+// Director_View IS regenerated here IF the lead was allocated to a
+// director (i.e. assignedDirector is set) — so newly-created/
+// allocated leads appear in the grouped report immediately, rather
+// than only after a later bulkAssign/telecaller-assignment or manual
+// sync. This is a low-frequency event (one regen per lead created),
+// distinct from updateLead (status changes), which remains a no-op
+// for Director_View since telecallers update many leads per day.
 const createLead = async (req, res) => {
   try {
     const leadData = { ...req.body };
@@ -81,6 +87,17 @@ const createLead = async (req, res) => {
       notify.leadAssignedToTelecaller(populated.assignedTelecaller._id, populated.name);
     }
     syncToSheets(populated, 'create');
+
+    // Director_View — regenerate when a newly-created lead is
+    // allocated to a director, so it appears in the grouped report
+    // immediately rather than waiting for a later bulkAssign/sync.
+    // Skipped if the lead has no director yet (nothing changes in
+    // Director_View for an unallocated lead).
+    if (populated.assignedDirector) {
+      regenerateDirectorView().catch((e) =>
+        console.error('[CreateLead] Director_View regen failed:', e.message)
+      );
+    }
   } catch (err) { res.status(400).json({ message: err.message }); }
 };
 
