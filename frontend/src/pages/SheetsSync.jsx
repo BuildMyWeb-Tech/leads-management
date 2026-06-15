@@ -17,6 +17,10 @@ const ALL_COLUMNS = [
   { value: 'updatedAt',        label: 'Updated Date' },
 ];
 
+// Director_View is always exactly these 5 columns, in this order —
+// not configurable. Shown read-only in the UI for clarity.
+const DIRECTOR_VIEW_COLUMNS = ['Director', 'Customer Name', 'Mobile Number', 'Status', 'Remarks / Notes'];
+
 // ── Extract spreadsheet ID from a full URL or raw ID ─────────
 // Works with all formats:
 //   https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit?...
@@ -104,7 +108,7 @@ function ColumnOrderEditor({ order, onChange }) {
   return (
     <div>
       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-        Column order in sheet
+        Column order — Operational_Leads sheet
       </p>
 
       <div className="space-y-1.5 mb-4">
@@ -205,7 +209,8 @@ export default function SheetsSync() {
   // The extracted clean ID (shown in green below the field)
   const [extractedId,    setExtractedId]    = useState('');
 
-  const [sheetName,     setSheetName]     = useState('Leads');
+  const [sheetName,            setSheetName]            = useState('Operational_Leads');
+  const [directorViewSheetName, setDirectorViewSheetName] = useState('Director_View');
   const [serviceAccJson, setServiceAccJson] = useState('');
   const [isActive,      setIsActive]      = useState(false);
   const [syncOnCreate,  setSyncOnCreate]  = useState(true);
@@ -235,7 +240,8 @@ export default function SheetsSync() {
       // Show the clean ID (already extracted by backend)
       setSpreadsheetRaw(data.spreadsheetId || '');
       setExtractedId(data.spreadsheetId || '');
-      setSheetName(data.sheetName || 'Leads');
+      setSheetName(data.sheetName || 'Operational_Leads');
+      setDirectorViewSheetName(data.directorViewSheetName || 'Director_View');
       setIsActive(data.isActive || false);
       setSyncOnCreate(data.syncOnCreate !== false);
       setSyncOnUpdate(data.syncOnUpdate !== false);
@@ -256,6 +262,7 @@ export default function SheetsSync() {
         // Always send the raw value — backend will extract the ID
         spreadsheetId: spreadsheetRaw,
         sheetName,
+        directorViewSheetName,
         isActive,
         syncOnCreate,
         syncOnUpdate,
@@ -267,6 +274,8 @@ export default function SheetsSync() {
       // Sync displayed value to what backend actually stored
       setSpreadsheetRaw(data.spreadsheetId || '');
       setExtractedId(data.spreadsheetId || '');
+      setSheetName(data.sheetName || 'Operational_Leads');
+      setDirectorViewSheetName(data.directorViewSheetName || 'Director_View');
       setServiceAccJson('');
       toast.success('Configuration saved');
     } catch (err) {
@@ -280,7 +289,7 @@ export default function SheetsSync() {
     setVerifying(true);
     try {
       const { data } = await api.post('/sheets/verify');
-      toast.success(`✅ Connected! "${data.spreadsheetTitle}" → Sheet: "${data.sheetName}"`);
+      toast.success(`✅ Connected! "${data.spreadsheetTitle}" → ${data.sheetName} + ${data.directorViewSheetName}`);
       fetchConfig();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Connection failed');
@@ -348,8 +357,8 @@ export default function SheetsSync() {
       <ConfirmModal
         open={syncConfirmOpen}
         title="Sync all leads to Google Sheets?"
-        message="This rewrites the entire sheet with all current leads. Each lead gets exactly one row — existing rows are updated in place, not duplicated."
-        warning="⚠ The Google Sheet will be fully overwritten. Your database (MongoDB) is never affected."
+        message="This rewrites Operational_Leads with all current leads (one row each) and regenerates Director_View grouped by director. Existing rows are replaced, not duplicated."
+        warning="⚠ Both sheet tabs will be fully overwritten. Your database (MongoDB) is never affected."
         confirmLabel="Yes, sync all leads"
         confirmClass="btn-primary"
         onConfirm={handleSyncAllConfirmed}
@@ -372,7 +381,8 @@ export default function SheetsSync() {
         <div>
           <h2 className="page-title">Google Sheets Sync</h2>
           <p className="text-sm text-gray-400 mt-0.5">
-            MongoDB is always the source of truth. Sheets is the reporting layer.
+            MongoDB is always the source of truth. Sheets is the reporting layer —
+            two tabs: an append-only operational timeline, and a grouped director report.
           </p>
         </div>
         {cfg && <SyncStatusBadge status={cfg.lastSyncStatus} />}
@@ -388,7 +398,7 @@ export default function SheetsSync() {
             <div className="flex-1 min-w-0 mr-4">
               <p className="text-sm font-semibold text-gray-800">Auto-sync</p>
               <p className="text-xs text-gray-400 mt-0.5">
-                Automatically append rows when leads are created or updated.
+                Automatically append new leads to Operational_Leads as they're created or imported.
               </p>
             </div>
             <button
@@ -445,17 +455,34 @@ export default function SheetsSync() {
               )}
             </div>
 
-            <div>
-              <label className="label">Sheet tab name</label>
-              <input
-                className="input"
-                placeholder="Leads"
-                value={sheetName}
-                onChange={(e) => setSheetName(e.target.value)}
-              />
-              <p className="text-xs text-gray-400 mt-1">
-                The tab name inside the spreadsheet. Created automatically if it doesn't exist.
-              </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="label">Operational sheet tab name</label>
+                <input
+                  className="input"
+                  placeholder="Operational_Leads"
+                  value={sheetName}
+                  onChange={(e) => setSheetName(e.target.value)}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Append-only timeline — one row per lead, configurable columns below.
+                  Created automatically if it doesn't exist.
+                </p>
+              </div>
+
+              <div>
+                <label className="label">Director report tab name</label>
+                <input
+                  className="input"
+                  placeholder="Director_View"
+                  value={directorViewSheetName}
+                  onChange={(e) => setDirectorViewSheetName(e.target.value)}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Grouped-by-director report. Fixed 5-column format
+                  (see below). Created automatically if it doesn't exist.
+                </p>
+              </div>
             </div>
 
             <div>
@@ -470,16 +497,24 @@ export default function SheetsSync() {
                   />
                   <span className="text-sm text-gray-700">On lead create</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer touch-manipulation">
+                <label className="flex items-center gap-2 cursor-not-allowed opacity-50">
                   <input
                     type="checkbox"
                     checked={syncOnUpdate}
                     onChange={(e) => setSyncOnUpdate(e.target.checked)}
+                    disabled
                     className="w-4 h-4 rounded border-gray-300 text-blue-600"
                   />
                   <span className="text-sm text-gray-700">On lead update</span>
                 </label>
               </div>
+              <p className="text-xs text-gray-400 mt-1">
+                Operational_Leads is append-only — updates to existing leads
+                (status changes, reassignments) don't rewrite past rows.
+                Director_View reflects the latest data when it's next
+                regenerated (after imports, "Sync all leads", or allocation
+                config changes).
+              </p>
             </div>
           </div>
 
@@ -499,15 +534,6 @@ export default function SheetsSync() {
                 </span>
               )}
             </div>
-
-            {/* <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700 space-y-1">
-              <p className="font-semibold mb-1">Setup steps:</p>
-              <p>1. Google Cloud Console → APIs & Services → Credentials</p>
-              <p>2. Create a Service Account, download the JSON key file</p>
-              <p>3. Share spreadsheet → add service account email as <strong>Editor</strong></p>
-              <p>4. Enable the Google Sheets API in your project</p>
-              <p>5. Paste the full JSON key content below</p>
-            </div> */}
 
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -541,16 +567,26 @@ export default function SheetsSync() {
             </div>
           </div>
 
-          {/* Column order */}
+          {/* Column order — Operational_Leads only */}
           <div className="card">
             <ColumnOrderEditor order={columnOrder} onChange={setColumnOrder} />
             <div className="mt-3 bg-gray-50 rounded-lg px-3 py-2">
-              <p className="text-xs text-gray-500 font-medium">Preview header row:</p>
+              <p className="text-xs text-gray-500 font-medium">Preview header row (Operational_Leads):</p>
               <p className="text-xs font-mono text-gray-600 mt-1 overflow-x-auto scrollbar-hide">
                 {columnOrder.map((c, i) => {
                   const meta = ALL_COLUMNS.find((x) => x.value === c);
                   return `${String.fromCharCode(65 + i)}: ${meta?.label || c}`;
                 }).join('  |  ')}
+              </p>
+            </div>
+
+            {/* Director_View fixed format — read-only info */}
+            <div className="mt-3 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2">
+              <p className="text-xs text-indigo-700 font-medium">
+                Director_View columns (fixed — not configurable):
+              </p>
+              <p className="text-xs font-mono text-indigo-600 mt-1 overflow-x-auto scrollbar-hide">
+                {DIRECTOR_VIEW_COLUMNS.map((c, i) => `${String.fromCharCode(65 + i)}: ${c}`).join('  |  ')}
               </p>
             </div>
           </div>
@@ -612,6 +648,21 @@ export default function SheetsSync() {
             <div className="card">
               <h3 className="text-sm font-semibold text-gray-800 mb-3">Sync statistics</h3>
               <SyncStats cfg={cfg} />
+
+              <div className="mt-3 grid grid-cols-1 gap-2">
+                <div className="bg-gray-50 rounded-lg px-3 py-2 flex items-center justify-between">
+                  <span className="text-xs text-gray-500">Director_View last regenerated</span>
+                  <span className="text-xs font-semibold text-gray-700">
+                    {cfg.lastDirectorViewSyncAt
+                      ? new Date(cfg.lastDirectorViewSyncAt).toLocaleDateString('en-IN', {
+                          day: '2-digit', month: 'short',
+                          hour: '2-digit', minute: '2-digit',
+                        })
+                      : '—'}
+                  </span>
+                </div>
+              </div>
+
               {cfg.lastSyncError && (
                 <div className="mt-3 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
                   <p className="text-xs font-medium text-red-600 mb-0.5">Last error</p>
@@ -625,7 +676,9 @@ export default function SheetsSync() {
           <div className="card space-y-3">
             <h3 className="text-sm font-semibold text-gray-800">Manual sync</h3>
             <p className="text-xs text-gray-400">
-              Overwrites the entire sheet with current MongoDB data. MongoDB is never affected.
+              Rewrites Operational_Leads with current MongoDB data and
+              regenerates Director_View (grouped by director). MongoDB is
+              never affected.
             </p>
             <button
               onClick={handleSyncAll}
@@ -639,7 +692,7 @@ export default function SheetsSync() {
                       stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                   </svg>
-                  Syncing all leads…
+                  Syncing…
                 </>
               ) : (
                 <>
@@ -678,7 +731,7 @@ export default function SheetsSync() {
               ) : (
                 <div className="space-y-2">
                   <p className="text-xs text-gray-500">
-                    These rows failed to sync. MongoDB data is safe.
+                    These rows failed to sync to Operational_Leads. MongoDB data is safe.
                   </p>
                   <div className="max-h-32 overflow-y-auto space-y-1 scrollbar-thin">
                     {cfg.retryQueue.slice(0, 5).map((item, i) => (
@@ -706,29 +759,6 @@ export default function SheetsSync() {
               )}
             </div>
           )}
-
-          {/* Data flow info */}
-          {/* <div className="card bg-gray-50 border-gray-200">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-              How sync works
-            </h3>
-            <div className="space-y-2 text-xs text-gray-600">
-              <div className="flex items-center gap-2">
-                <span>🗄️</span><span>Lead saved/updated in MongoDB</span>
-              </div>
-              <div className="flex justify-center text-gray-300">↓</div>
-              <div className="flex items-center gap-2">
-                <span>📋</span><span>Row appended to Google Sheet</span>
-              </div>
-              <div className="flex justify-center text-gray-300">↓</div>
-              <div className="flex items-center gap-2">
-                <span>✓</span><span>If Sheets fails → queued for retry</span>
-              </div>
-              <p className="text-gray-400 pt-2 border-t border-gray-200 mt-2">
-                MongoDB data is <strong>never</strong> affected by Sheets failures.
-              </p>
-            </div>
-          </div> */}
         </div>
       </div>
     </div>

@@ -23,10 +23,14 @@ const seed = async () => {
     { name: 'Director 1', email: 'director1@gmail.com',   password: 'Director@001', role: 'director'   },
     { name: 'Director 2', email: 'director2@gmail.com',   password: 'Director@002', role: 'director'   },
     { name: 'Director 3', email: 'director3@gmail.com',   password: 'Director@003', role: 'director'   },
+    { name: 'Director 4', email: 'director4@gmail.com',   password: 'Director@004', role: 'director'   },
+
     // Telecallers (Employees)
     { name: 'Employee 1', email: 'employee1@gmail.com',   password: 'Employee@001', role: 'telecaller' },
     { name: 'Employee 2', email: 'employee2@gmail.com',   password: 'Employee@002', role: 'telecaller' },
     { name: 'Employee 3', email: 'employee3@gmail.com',   password: 'Employee@003', role: 'telecaller' },
+    { name: 'Employee 4', email: 'employee4@gmail.com',   password: 'Employee@004', role: 'telecaller' },
+
   ];
 
   // Use User.create() one by one so the pre-save bcrypt hook runs on each

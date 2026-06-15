@@ -2,6 +2,7 @@ const Lead         = require('../models/Lead');
 const XLSX         = require('xlsx');
 const { pickNextDirector } = require('../utils/allocationEngine');
 const syncToSheets = require('../utils/syncToSheets');
+const { regenerateDirectorView } = require('../utils/syncToSheets');
 const { notify }   = require('../utils/pushService');
 const audit        = require('../utils/auditService');   // PHASE 10
 
@@ -47,6 +48,12 @@ const getLeads = async (req, res) => {
 };
 
 // ── POST /api/leads ───────────────────────────────────────────
+// Manual lead creation. Auto-allocation uses the Adaptive
+// Quota-Based Round Robin engine (pickNextDirector). On success,
+// the new lead is appended to Operational_Leads (fast path, via
+// syncToSheets 'create'). Director_View is NOT regenerated here —
+// per client requirement, individual manual lead creation must not
+// trigger a Director_View rebuild.
 const createLead = async (req, res) => {
   try {
     const leadData = { ...req.body };
@@ -90,6 +97,11 @@ const getLead = async (req, res) => {
 };
 
 // ── PUT /api/leads/:id ────────────────────────────────────────
+// syncToSheets(updated, 'update') is now a no-op for
+// Operational_Leads (append-only audit timeline — see
+// syncToSheets.js). Director_View is left stale until the next
+// regeneration trigger (Sync All / batch import / config change),
+// per client confirmation that this is acceptable.
 const updateLead = async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id);
@@ -161,6 +173,18 @@ const deleteLead = async (req, res) => {
 };
 
 // ── POST /api/leads/bulk-assign ───────────────────────────────
+// syncToSheets(l, 'update') calls below are no-ops for
+// Operational_Leads (append-only) — kept in place (harmless) for
+// future-proofing in case 'update' behaviour changes again, and
+// because they still drive lastSyncAt/lastSyncStatus bookkeeping
+// for 'create'-trigger leads in other code paths.
+//
+// Director_View IS regenerated after bulkAssign (telecaller
+// assignment changes) — see the regenerateDirectorView() call at the
+// end of this function. This is distinct from updateLead (status
+// changes), which does NOT trigger a regen, since telecallers update
+// many leads per day and that would cause excessive Sheets rewrites.
+// Admins can always force a full refresh via "Sync All Leads".
 const bulkAssign = async (req, res) => {
   try {
     const { leadIds, assignedDirector, assignedTelecaller } = req.body;
@@ -190,22 +214,37 @@ const bulkAssign = async (req, res) => {
     }
     audit.leadBulkAssigned(req, leadIds.length, dirName, tcName);
 
-    // Sync each affected lead to Google Sheets.
-    // bulkAssign uses Lead.updateMany() which bypasses the single-lead
-    // update path (updateLead) entirely, so syncToSheets was never
-    // called here. Director/telecaller assignments made via the
-    // Allocate Leads page never appeared in the sheet until a manual
-    // "Sync all leads now". Fix: upsert each lead individually here.
+    // syncToSheets(l, 'update') — no-op for Operational_Leads
+    // (append-only). Left in place for bookkeeping consistency;
+    // see comment above the function.
     const updatedLeads = await Lead.find({ _id: { $in: leadIds } })
       .populate('assignedDirector',   'name email')
       .populate('assignedTelecaller', 'name email');
     for (const l of updatedLeads) {
       syncToSheets(l, 'update');
     }
+
+    // Director_View — regenerate after telecaller assignment changes.
+    // Per client requirement: bulkAssign (director assigning leads to
+    // telecallers) is one of the explicit Director_View regeneration
+    // triggers, distinct from individual status updates (updateLead),
+    // which intentionally do NOT trigger a regen (telecallers update
+    // many leads per day — regenerating on every status change would
+    // cause excessive Sheets rewrites). Non-fatal; runs after the
+    // response has been sent.
+    regenerateDirectorView().catch((e) =>
+      console.error('[BulkAssign] Director_View regen failed:', e.message)
+    );
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
 // ── POST /api/leads/import-csv ────────────────────────────────
+// CSV-imported leads use the Adaptive Quota-Based Round Robin
+// engine (one pick per row, continuing the persisted cycle). On
+// success, each inserted lead is appended to Operational_Leads, and
+// Director_View is regenerated ONCE for the whole batch — per
+// client requirement: "Regenerate Director_View automatically ...
+// after CSV bulk imports complete."
 const importCSV = async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
@@ -240,6 +279,8 @@ const importCSV = async (req, res) => {
         status: LEAD_STATUSES.includes(String(r[mapping.status] || '').trim()) ? String(r[mapping.status]).trim() : 'New',
       };
       try {
+        // Adaptive Quota-Based Round Robin — one pick per row,
+        // continuing the persisted cycleRemaining/currentPointer.
         const pick = await pickNextDirector();
         if (pick) { raw.assignedDirector = pick.directorId; raw.status = 'Allocated'; }
       } catch (_) {}
@@ -249,6 +290,27 @@ const importCSV = async (req, res) => {
     const inserted = await Lead.insertMany(leadsToInsert, { ordered: false });
     res.json({ message: `${inserted.length} lead(s) imported`, count: inserted.length });
     audit.leadImportedCSV(req, inserted.length);
+
+    // Append each newly-inserted lead to Operational_Leads
+    // (fast path, no Director_View regen per-lead).
+    if (inserted.length > 0) {
+      try {
+        const populated = await Lead.find({ _id: { $in: inserted.map((l) => l._id) } })
+          .populate('assignedDirector', 'name email')
+          .populate('assignedTelecaller', 'name email');
+        for (const lead of populated) {
+          syncToSheets(lead, 'create');
+        }
+      } catch (e) {
+        console.error('[CSV Import] Operational_Leads sync failed:', e.message);
+      }
+
+      // Director_View — regenerate ONCE for the whole batch.
+      // Non-fatal; runs after the response has been sent.
+      regenerateDirectorView().catch((e) =>
+        console.error('[CSV Import] Director_View regen failed:', e.message)
+      );
+    }
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
 

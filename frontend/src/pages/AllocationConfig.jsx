@@ -2,14 +2,15 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 
-// ── Director sequence row — drag handle + enable toggle ────────
-// Replaces old RatioRow. No weight controls.
-function DirectorSequenceRow({
+// ── Director row — drag handle + quota input + enable toggle ───
+// Replaces the old sequence-only row. sequenceOrder still
+// determines cycle participation ORDER (drag to reorder); quota
+// determines how many leads this director receives per cycle
+// before being skipped until the next cycle.
+function DirectorQuotaRow({
   entry, index, directors, onChange, onRemove, isOnly,
   onDragStart, onDragOver, onDrop, onDragEnd, isDragging,
 }) {
-  const dir = directors.find((d) => d._id === entry.director);
-
   return (
     <div
       draggable
@@ -47,6 +48,20 @@ function DirectorSequenceRow({
         ))}
       </select>
 
+      {/* Quota input */}
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <label className="text-xs text-gray-400 hidden sm:inline">Quota</label>
+        <input
+          type="number"
+          min={0}
+          step={1}
+          inputMode="numeric"
+          value={entry.quota}
+          onChange={(e) => onChange(index, 'quota', e.target.value)}
+          className="input w-16 text-sm text-center py-1"
+        />
+      </div>
+
       {/* Enable / disable toggle */}
       <button
         type="button"
@@ -54,7 +69,7 @@ function DirectorSequenceRow({
         className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full
           transition-colors
           ${entry.enabled ? 'bg-blue-600' : 'bg-gray-200'}`}
-        title={entry.enabled ? 'Enabled — receives leads' : 'Disabled — skipped'}
+        title={entry.enabled ? 'Enabled — participates in the cycle' : 'Disabled — skipped'}
       >
         <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow
           transition-transform ${entry.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -84,14 +99,16 @@ function DirectorSequenceRow({
   );
 }
 
-// ── Live preview — numbered Lead N → Director list ──────────────
+// ── Live preview — Adaptive Quota-Based Round Robin sequence ────
+// Shows Lead N → Director, with a cycle-reset divider where the
+// engine would reset all quotas back to full and start over.
 function SequencePreview({ preview, loading }) {
   if (loading) {
     return <div className="py-6 text-center text-sm text-gray-400">Computing preview...</div>;
   }
   if (!preview) return null;
 
-  const { sequence, enabledCount, startPointer } = preview;
+  const { sequence, enabledCount } = preview;
 
   const colors = [
     'bg-blue-100 text-blue-700','bg-indigo-100 text-indigo-700',
@@ -116,31 +133,46 @@ function SequencePreview({ preview, loading }) {
         Upcoming sequence
       </p>
       <p className="text-xs text-gray-400 mb-3">
-        {enabledCount} director{enabledCount !== 1 ? 's' : ''} in rotation
-        {startPointer > 0 && (
-          <span> — continuing from position {(startPointer % enabledCount) + 1}</span>
-        )}
+        {enabledCount} director{enabledCount !== 1 ? 's' : ''} with quota &gt; 0 —
+        leads interleave across directors and skip any whose quota for
+        the current cycle is used up. When all are exhausted, quotas
+        reset and the cycle repeats.
       </p>
 
       <div className="space-y-1.5">
         {sequence.map((item) => (
-          <div key={item.leadNumber} className="flex items-center gap-2">
-            <span className="text-xs text-gray-400 w-16 flex-shrink-0">
-              Lead {item.leadNumber}
-            </span>
-            <svg className="w-3 h-3 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-            </svg>
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full
-              text-xs font-medium truncate ${colorMap[item.directorId]}`}>
-              {item.director}
-            </span>
+          <div key={item.leadNumber}>
+            {item.cycleReset && item.leadNumber > 1 && (
+              <div className="flex items-center gap-2 my-2">
+                <div className="flex-1 border-t border-dashed border-gray-200" />
+                <span className="text-xs text-gray-400 font-medium px-1">
+                  cycle reset — quotas refilled
+                </span>
+                <div className="flex-1 border-t border-dashed border-gray-200" />
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400 w-16 flex-shrink-0">
+                Lead {item.leadNumber}
+              </span>
+              <svg className="w-3 h-3 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full
+                text-xs font-medium truncate ${colorMap[item.directorId]}`}>
+                {item.director}
+              </span>
+              <span className="text-xs text-gray-400 ml-auto truncate">
+                {item.remainingAfter.map((r) => `${r.director}=${r.remaining}`).join(' ')}
+              </span>
+            </div>
           </div>
         ))}
       </div>
 
       <p className="text-xs text-gray-400 mt-3">
-        After lead {sequence.length} the sequence continues — position {enabledCount} loops back to 1.
+        Numbers on the right show each director's remaining quota for the
+        current cycle, immediately after that lead is allocated.
       </p>
     </div>
   );
@@ -176,7 +208,7 @@ function RunPanel({ unallocated, onAllocated }) {
     <div className="card">
       <h3 className="text-sm font-semibold text-gray-800 mb-1">Run allocation</h3>
       <p className="text-xs text-gray-400 mb-4">
-        Assign unallocated leads to directors using the configured sequence.
+        Assign unallocated leads to directors using the configured quotas.
         <span className="ml-1 font-medium text-orange-500">
           {unallocated} lead{unallocated !== 1 ? 's' : ''} waiting.
         </span>
@@ -249,7 +281,7 @@ function RunPanel({ unallocated, onAllocated }) {
 
 export default function AllocationConfig() {
   const [directors,     setDirectors]     = useState([]); // all available directors (users)
-  const [entries,       setEntries]       = useState([{ director: '', enabled: true, sequenceOrder: 0 }]);
+  const [entries,       setEntries]       = useState([{ director: '', enabled: true, sequenceOrder: 0, quota: 1 }]);
   const [isActive,      setIsActive]      = useState(true);
   const [saving,        setSaving]        = useState(false);
   const [preview,       setPreview]       = useState(null);
@@ -285,6 +317,7 @@ export default function AllocationConfig() {
                 director:      String(d.director?._id || d.director),
                 enabled:       d.enabled !== false,
                 sequenceOrder: d.sequenceOrder,
+                quota:         d.quota ?? 1,
               }))
           );
         }
@@ -302,8 +335,9 @@ export default function AllocationConfig() {
     if (valid.length === 0) { setPreview(null); return; }
     setPreviewLoading(true);
     try {
-      const payload = valid.map((e, i) => ({ ...e, sequenceOrder: i }));
-      const { data } = await api.post('/allocation/preview', { directors: payload, count: 8 });
+      const payload = valid.map((e, i) => ({ ...e, sequenceOrder: i, quota: Number(e.quota) || 0 }));
+
+      const { data } = await api.post('/allocation/preview', { directors: payload, count: 18 });
       setPreview(data);
     } catch { setPreview(null); }
     finally { setPreviewLoading(false); }
@@ -318,7 +352,7 @@ export default function AllocationConfig() {
     setEntries((prev) => prev.map((e, i) => (i === index ? { ...e, [field]: value } : e)));
 
   const addRow = () =>
-    setEntries((prev) => [...prev, { director: '', enabled: true, sequenceOrder: prev.length }]);
+    setEntries((prev) => [...prev, { director: '', enabled: true, sequenceOrder: prev.length, quota: 1 }]);
 
   const removeRow = (index) =>
     setEntries((prev) => prev.filter((_, i) => i !== index)
@@ -367,9 +401,16 @@ export default function AllocationConfig() {
     const ids = valid.map((e) => e.director);
     if (new Set(ids).size !== ids.length) return toast.error('Each director can only appear once');
 
-    const enabledCount = valid.filter((e) => e.enabled).length;
-    if (isActive && enabledCount === 0) {
-      return toast.error('At least one director must be enabled');
+    for (const e of valid) {
+      const q = Number(e.quota);
+      if (!Number.isFinite(q) || q < 0) {
+        return toast.error('Quotas must be 0 or greater');
+      }
+    }
+
+    const enabledWithQuota = valid.filter((e) => e.enabled && Number(e.quota) > 0).length;
+    if (isActive && enabledWithQuota === 0) {
+      return toast.error('At least one enabled director must have a quota greater than 0');
     }
 
     setSaving(true);
@@ -378,10 +419,12 @@ export default function AllocationConfig() {
         director: e.director,
         enabled: e.enabled,
         sequenceOrder: i,
+        quota: Number(e.quota),
       }));
       await api.put('/allocation/config', { directors: payload, isActive });
       toast.success('Allocation config saved');
       await refreshStats();
+      await fetchPreview();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Save failed');
     } finally {
@@ -390,10 +433,10 @@ export default function AllocationConfig() {
   };
 
   const handleResetCursor = async () => {
-    if (!window.confirm('Reset the sequence to position 1? The next lead will go to the first director in the sequence again.')) return;
+    if (!window.confirm('Reset the allocation cycle? Quotas will refill to their configured values and the next lead will go to the first director in sequence.')) return;
     try {
       await api.post('/allocation/reset-cursor');
-      toast.success('Sequence pointer reset to position 1');
+      toast.success('Allocation cycle reset');
       await refreshStats();
       await fetchPreview();
     } catch {
@@ -401,7 +444,7 @@ export default function AllocationConfig() {
     }
   };
 
-  const enabledCount = entries.filter((e) => e.director && e.enabled).length;
+  const enabledCount = entries.filter((e) => e.director && e.enabled && Number(e.quota) > 0).length;
 
   if (configLoading) {
     return (
@@ -419,7 +462,10 @@ export default function AllocationConfig() {
       <div className="mb-6">
         <h2 className="page-title">Allocation Engine</h2>
         <p className="text-sm text-gray-400 mt-0.5">
-          Round-robin auto-assignment of incoming leads to directors, in sequence order.
+          Adaptive Quota-Based Round Robin — leads interleave across
+          directors in sequence order, each receiving up to its quota
+          per cycle. When every director's quota is used up, the cycle
+          resets and repeats.
         </p>
       </div>
 
@@ -433,7 +479,8 @@ export default function AllocationConfig() {
             <div>
               <p className="text-sm font-medium text-gray-800">Auto-allocation</p>
               <p className="text-xs text-gray-400 mt-0.5">
-                When active, new leads are automatically assigned to the next director in sequence.
+                When active, new leads are automatically assigned using the
+                quota-based cycle below.
               </p>
             </div>
             <button
@@ -448,25 +495,28 @@ export default function AllocationConfig() {
             </button>
           </div>
 
-          {/* Director sequence editor */}
+          {/* Director quota editor */}
           <div className="card">
             <div className="flex items-center justify-between mb-1">
-              <h3 className="text-sm font-semibold text-gray-800">Director sequence</h3>
+              <h3 className="text-sm font-semibold text-gray-800">Directors & quotas</h3>
               {enabledCount > 0 && (
                 <span className="text-xs text-gray-400">
-                  <span className="font-semibold text-gray-600">{enabledCount}</span> enabled
+                  <span className="font-semibold text-gray-600">{enabledCount}</span> in rotation
                 </span>
               )}
             </div>
             <p className="text-xs text-gray-400 mb-4">
-              Drag to reorder. Each new lead goes to the next enabled director in this list,
-              looping back to the top after the last one.
+              Drag to reorder — this sets each director's position in the
+              interleave cycle (A, B, C, D, ...). Quota sets how many leads
+              each director receives per cycle before being skipped until
+              the next cycle.
             </p>
 
             <div className="flex items-center gap-3 mb-1 px-1">
               <div className="w-5" />
               <div className="w-6" />
               <span className="flex-1 text-xs font-medium text-gray-400">Director</span>
+              <span className="text-xs font-medium text-gray-400 w-20 text-center">Quota</span>
               <span className="text-xs font-medium text-gray-400 w-11 text-center">Active</span>
               <span className="text-xs font-medium text-gray-400 w-16">Status</span>
               <div className="w-7" />
@@ -478,7 +528,7 @@ export default function AllocationConfig() {
                   key={index}
                   className={dragOverIndex === index ? 'border-t-2 border-blue-400' : ''}
                 >
-                  <DirectorSequenceRow
+                  <DirectorQuotaRow
                     entry={entry}
                     index={index}
                     directors={directors}
@@ -508,11 +558,16 @@ export default function AllocationConfig() {
           </div>
 
           <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3">
-            <p className="text-xs font-medium text-blue-700 mb-1">How round robin works</p>
+            <p className="text-xs font-medium text-blue-700 mb-1">How Adaptive Quota-Based Round Robin works</p>
             <p className="text-xs text-blue-600">
-              With 4 enabled directors D1–D4: Lead 1 → D1, Lead 2 → D2, Lead 3 → D3, Lead 4 → D4,
-              Lead 5 → D1, and so on. Disabled directors are skipped automatically.
-              Adding a new director joins the rotation immediately without resetting past assignments.
+              Example — A=9, B=4, C=4, D=1: Lead 1→A, 2→B, 3→C, 4→D, 5→A, 6→B,
+              7→C, 8→A, 9→B, 10→C, 11→A, 12→B, 13→C, 14→A, 15→A, 16→A, 17→A,
+              18→A — then all quotas are used up, so the cycle resets and
+              repeats from Lead 19. Directors are skipped once their quota
+              for the current cycle reaches 0. Disabled directors or those
+              with quota 0 never receive leads. Adding a new director or
+              changing quotas/order starts a fresh cycle; existing leads are
+              never reallocated.
             </p>
           </div>
 
@@ -538,20 +593,20 @@ export default function AllocationConfig() {
               )}
             </button>
             <button type="button" onClick={handleResetCursor} className="btn-ghost text-xs">
-              Reset sequence
+              Reset cycle
             </button>
           </div>
         </div>
 
         {/* ── Right: Preview + stats ────────────── */}
-        <div className="lg:col-span-2 space-y-5">
+        <div className="lg:col-span-2 space-y-6">
 
           <div className="card">
             <h3 className="text-sm font-semibold text-gray-800 mb-3">Live preview</h3>
             <SequencePreview preview={preview} loading={previewLoading} />
             {!preview && !previewLoading && (
               <p className="text-xs text-gray-400 text-center py-4">
-                Add directors to see the upcoming sequence.
+                Add directors with a quota to see the upcoming sequence.
               </p>
             )}
           </div>
@@ -571,18 +626,31 @@ export default function AllocationConfig() {
                 </div>
               </div>
 
-              {stats.enabledCount > 0 && (
-                <div className="text-xs text-gray-400 mb-3">
-                  Sequence position:{' '}
-                  <span className="font-medium text-gray-600">
-                    {stats.pointerPosition + 1} / {stats.enabledCount}
-                  </span>
-                  <span className="text-gray-300"> (pointer: {stats.currentPointer})</span>
+              {(stats.cycleRemaining || []).length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs font-medium text-gray-400 mb-2">
+                    Current cycle — remaining quota
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {stats.cycleRemaining.map((c) => (
+                      <span key={c.directorId}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full
+                                   text-xs font-medium bg-gray-100 text-gray-600">
+                        {c.name}
+                        <span className="font-semibold text-gray-800">
+                          {c.remaining}{c.quota != null ? `/${c.quota}` : ''}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
 
               {(stats.directorBreakdown || []).length > 0 && (
                 <div className="space-y-2">
+                  <p className="text-xs font-medium text-gray-400 mb-1">
+                    All-time allocation totals
+                  </p>
                   {stats.directorBreakdown.map((d) => {
                     const pct = stats.allocated > 0
                       ? Math.round((d.count / stats.allocated) * 100) : 0;

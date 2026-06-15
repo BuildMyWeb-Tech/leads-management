@@ -1,6 +1,9 @@
 const SheetSync  = require('../models/SheetSync');
 const Lead       = require('../models/Lead');
-const { appendRow, upsertRow, verifyConnection, bulkSync, COLUMN_LABELS } = require('../utils/sheetsService');
+const {
+  appendRow, upsertRow, verifyConnection, bulkSync, COLUMN_LABELS,
+  regenerateDirectorView: regenerateDirectorViewSheet,
+} = require('../utils/sheetsService');
 const audit = require('../utils/auditService');
 
 // ── Helper: get or create singleton config ────────────────────
@@ -50,6 +53,7 @@ const saveSheetConfig = async (req, res) => {
     const {
       spreadsheetId,
       sheetName,
+      directorViewSheetName,
       serviceAccountJson,
       isActive,
       syncOnCreate,
@@ -60,7 +64,8 @@ const saveSheetConfig = async (req, res) => {
     const cfg = await getConfig();
  
     if (spreadsheetId  !== undefined) cfg.spreadsheetId  = spreadsheetId;
-    if (sheetName      !== undefined) cfg.sheetName      = sheetName || 'Leads';
+    if (sheetName      !== undefined) cfg.sheetName      = sheetName || 'Operational_Leads';
+    if (directorViewSheetName !== undefined) cfg.directorViewSheetName = directorViewSheetName || 'Director_View';
     if (isActive       !== undefined) cfg.isActive       = isActive;
     if (syncOnCreate   !== undefined) cfg.syncOnCreate   = syncOnCreate;
     if (syncOnUpdate   !== undefined) cfg.syncOnUpdate   = syncOnUpdate;
@@ -92,6 +97,7 @@ const saveSheetConfig = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/sheets/verify
+// Ensures both Operational_Leads and Director_View tabs exist.
 // ─────────────────────────────────────────────────────────────
 const verifySheetConnection = async (req, res) => {
   try {
@@ -107,7 +113,8 @@ const verifySheetConnection = async (req, res) => {
     const result = await verifyConnection(
       cfg.serviceAccountJson,
       cfg.spreadsheetId,
-      cfg.sheetName || 'Leads',
+      cfg.sheetName || 'Operational_Leads',
+      cfg.directorViewSheetName || 'Director_View',
     );
 
     // On successful verify, clear any previous errors
@@ -122,8 +129,15 @@ const verifySheetConnection = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/sheets/sync-all
+//
+// Full re-sync of BOTH tabs:
+//   1. Operational_Leads — bulkSync (rewrite, one row per lead,
+//      sorted by createdAt — same as before).
+//   2. Director_View — regenerate (grouped by director).
+//
+// Per client requirement, "Admin clicks Sync All Leads" is one of
+// the explicit Director_View regeneration triggers.
 // ─────────────────────────────────────────────────────────────
-
 const syncAll = async (req, res) => {
   try {
     const cfg = await getConfig();
@@ -139,19 +153,26 @@ const syncAll = async (req, res) => {
       .lean();
  
     // Pass a version of config that forces isActive=true for manual sync
-    // so bulkSync works even when auto-sync toggle is OFF
-    const result = await bulkSync({ ...cfg.toObject(), isActive: true }, leads);
+    // so bulkSync/regenerateDirectorView work even when auto-sync toggle is OFF
+    const activeCfg = { ...cfg.toObject(), isActive: true };
+
+    const result = await bulkSync(activeCfg, leads);
+
+    // Regenerate Director_View as part of the same manual sync
+    const dvResult = await regenerateDirectorViewSheet(activeCfg, leads);
  
     // totalSynced = unique leads in sheet after this sync
     cfg.totalSynced    = result.count;
     cfg.lastSyncAt     = new Date();
     cfg.lastSyncStatus = 'success';
     cfg.lastSyncError  = '';
+    if (dvResult.success) cfg.lastDirectorViewSyncAt = new Date();
     await cfg.save();
  
     res.json({
-      message: `${result.count} lead${result.count !== 1 ? 's' : ''} synced to Google Sheets`,
+      message: `${result.count} lead${result.count !== 1 ? 's' : ''} synced to Operational_Leads, Director_View regenerated`,
       count: result.count,
+      directorViewCount: dvResult.count || 0,
     });
     audit.sheetsSync(req, result.count);
   } catch (err) {
@@ -169,7 +190,9 @@ const syncAll = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/sheets/sync-lead/:id
-// Manually push a single lead to Sheets.
+// Manually push a single lead to Operational_Leads (upsert —
+// unchanged). Does NOT regenerate Director_View (not one of the
+// agreed trigger events for a single-lead manual push).
 // ─────────────────────────────────────────────────────────────
 const syncSingleLead = async (req, res) => {
   try {
@@ -268,7 +291,8 @@ const clearRetryQueue = async (req, res) => {
  
 // ─────────────────────────────────────────────────────────────
 // GET /api/sheets/column-options
-// Returns all available column fields with labels.
+// Returns all available column fields with labels (Operational_Leads only —
+// Director_View columns are fixed and not configurable).
 // ─────────────────────────────────────────────────────────────
 const getColumnOptions = async (req, res) => {
   res.json(

@@ -2,38 +2,102 @@ const AllocationConfig = require('../models/AllocationConfig');
 const audit = require('../utils/auditService');
 const Lead = require('../models/Lead');
 const User = require('../models/User');
-const { pickNextDirector, previewSequence, getEnabledDirectors } = require('../utils/allocationEngine');
+const {
+  pickNextDirector,
+  previewSequence,
+  getEnabledDirectors,
+  freshCycleRemaining,
+  cycleRemainingIsStale,
+} = require('../utils/allocationEngine');
+const { regenerateDirectorView } = require('../utils/syncToSheets');
 
 // ─────────────────────────────────────────────────────────────
-// Lazy migration: old configs had `ratios: [{ director, weight }]`.
-// New configs use `directors: [{ director, enabled, sequenceOrder }]`.
-// If a config has the old shape (ratios present, directors empty),
-// convert it once on read — preserving director ORDER from ratios.
-// currentPointer starts at 0 (old `cursor` semantics don't map
-// cleanly to round robin, so we start the new sequence fresh).
+// Lazy migration:
+//   v1 (oldest): { ratios: [{ director, weight }] }
+//   v2 (round robin): { directors: [{ director, enabled, sequenceOrder }],
+//                        allocationMode: 'round_robin', currentPointer }
+//   v3 (current — Adaptive Quota-Based Round Robin):
+//       { directors: [{ director, enabled, sequenceOrder, quota }],
+//         allocationMode: 'adaptive_quota_round_robin',
+//         cycleRemaining, currentPointer }
+//
+// Migration is additive and idempotent — run on every read.
+// Existing leads are NEVER touched by migration; only the config
+// document is updated.
 // ─────────────────────────────────────────────────────────────
 const migrateIfNeeded = async (config) => {
-  const hasOldRatios   = Array.isArray(config.ratios) && config.ratios.length > 0;
+  let changed = false;
+
+  // v1 → v2: old ratios[] → directors[] with enabled/sequenceOrder
+  const hasOldRatios    = Array.isArray(config.ratios) && config.ratios.length > 0;
   const hasNewDirectors = Array.isArray(config.directors) && config.directors.length > 0;
 
   if (hasOldRatios && !hasNewDirectors) {
-    config.directors = config.ratios.map((r, i) => ({
-      director:      r.director,
-      enabled:       true,
-      sequenceOrder: i,
-    }));
-    config.allocationMode = 'round_robin';
-    config.currentPointer = 0;
-    config.ratios = undefined; // drop old field
-    await config.save();
+    config.directors = config.ratios
+      .filter((r) => r && r.director) // drop entries with no director ref
+      .map((r, i) => ({
+        director:      r.director,
+        enabled:       true,
+        sequenceOrder: i,
+        quota:         Math.max(1, Math.round(r.weight || 1)),
+      }));
+    config.ratios = undefined;
+    changed = true;
   }
+
+  // Defensive: drop any director entries with a missing/null director
+  // ref (e.g. a user that was deleted, or a malformed legacy entry).
+  // Without this, getEnabledDirectors()/freshCycleRemaining() build
+  // cycleRemaining entries with director: null, which violates the
+  // schema's `required: true` on cycleRemaining.director and makes
+  // config.save() throw a ValidationError -> 500 on GET /config.
+  if (Array.isArray(config.directors) && config.directors.length > 0) {
+    const before = config.directors.length;
+    config.directors = config.directors.filter((d) => d && d.director);
+    if (config.directors.length !== before) changed = true;
+  }
+
+  // v2 → v3: directors[] missing `quota` → default quota = 1 each.
+  // (A config saved under the old round_robin mode had no quota
+  // concept — every director effectively got "1 per turn", which is
+  // exactly quota=1 in the new engine, preserving the same
+  // round-robin behaviour until the admin sets real quotas.)
+  if (Array.isArray(config.directors) && config.directors.length > 0) {
+    let needsQuota = false;
+    config.directors.forEach((d) => {
+      if (d.quota === undefined || d.quota === null) {
+        d.quota = 1;
+        needsQuota = true;
+      }
+    });
+    if (needsQuota) changed = true;
+  }
+
+  if (config.allocationMode !== 'adaptive_quota_round_robin') {
+    config.allocationMode = 'adaptive_quota_round_robin';
+    changed = true;
+  }
+
+  // Initialise cycleRemaining if absent/stale relative to the
+  // (possibly just-migrated) directors[] — starts a fresh cycle.
+  // This only runs once on first read after migration; subsequent
+  // reads see a structurally-matching cycleRemaining and skip this.
+  const enabled = getEnabledDirectors(config);
+  if (enabled.length > 0 && cycleRemainingIsStale(config, enabled)) {
+    config.cycleRemaining = freshCycleRemaining(enabled);
+    config.currentPointer = 0;
+    changed = true;
+  }
+
+  if (changed) await config.save();
   return config;
 };
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/allocation/config
 // Returns current config (with populated director names).
-// Auto-migrates legacy ratios[] configs to directors[] on read.
+// Auto-migrates legacy configs to the Adaptive Quota-Based Round
+// Robin shape on read.
 // Admin only
 // ─────────────────────────────────────────────────────────────
 const getConfig = async (req, res) => {
@@ -43,9 +107,10 @@ const getConfig = async (req, res) => {
     if (!config) {
       config = await AllocationConfig.create({
         directors: [],
+        cycleRemaining: [],
         currentPointer: 0,
         isActive: false,
-        allocationMode: 'round_robin',
+        allocationMode: 'adaptive_quota_round_robin',
       });
     } else {
       config = await migrateIfNeeded(config);
@@ -62,8 +127,20 @@ const getConfig = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────
 // PUT /api/allocation/config
-// Save the director sequence (order + enabled) and isActive flag.
-// Does NOT reset currentPointer (Option A — seamless continuation).
+// Save the director list (order + enabled + quota) and isActive flag.
+//
+// cycleRemaining is rebuilt (fresh cycle) whenever the saved
+// director list is structurally different from the previous one
+// (director added/removed/reordered) OR when any quota value
+// changed — both cases mean the previous cycleRemaining no longer
+// represents a valid in-progress cycle for this config.
+//
+// currentPointer is reset to 0 in that case; otherwise left
+// untouched (seamless continuation if the admin just re-saved an
+// identical config, e.g. toggling isActive).
+//
+// Triggers a Director_View regeneration after save (per client
+// requirement: "after allocation configuration changes").
 // Admin only
 // ─────────────────────────────────────────────────────────────
 const saveConfig = async (req, res) => {
@@ -85,6 +162,9 @@ const saveConfig = async (req, res) => {
       if (typeof d.sequenceOrder !== 'number' || d.sequenceOrder < 0) {
         return res.status(400).json({ message: 'Each entry must have a valid sequenceOrder' });
       }
+      if (d.quota === undefined || d.quota === null || Number(d.quota) < 0 || !Number.isFinite(Number(d.quota))) {
+        return res.status(400).json({ message: 'Each entry must have a valid quota (>= 0)' });
+      }
     }
 
     // Check for duplicate directors
@@ -93,10 +173,10 @@ const saveConfig = async (req, res) => {
       return res.status(400).json({ message: 'Duplicate directors — each director can appear only once' });
     }
 
-    // Require at least one ENABLED director when isActive is true
-    const enabledCount = directors.filter((d) => d.enabled !== false).length;
-    if ((isActive !== false) && enabledCount === 0) {
-      return res.status(400).json({ message: 'At least one director must be enabled' });
+    // Require at least one ENABLED director with quota > 0 when isActive is true
+    const enabledWithQuota = directors.filter((d) => d.enabled !== false && Number(d.quota) > 0).length;
+    if ((isActive !== false) && enabledWithQuota === 0) {
+      return res.status(400).json({ message: 'At least one enabled director must have a quota greater than 0' });
     }
 
     let config = await AllocationConfig.findOne();
@@ -104,19 +184,44 @@ const saveConfig = async (req, res) => {
       director:      d.director,
       enabled:       d.enabled !== false,
       sequenceOrder: Number(d.sequenceOrder),
+      quota:         Number(d.quota),
     }));
+
+    // Build the new enabled list (sorted) to compare against the
+    // PREVIOUS one for cycleRemaining reset decision.
+    const newEnabled = cleaned
+      .filter((d) => d.enabled)
+      .sort((a, b) => a.sequenceOrder - b.sequenceOrder);
+
+    let resetCycle = true; // default: fresh config → fresh cycle
+    if (config) {
+      const oldEnabled = getEnabledDirectors(config);
+      const sameShape =
+        oldEnabled.length === newEnabled.length &&
+        oldEnabled.every((od, i) =>
+          String(od.director) === String(newEnabled[i].director) &&
+          Number(od.quota)    === Number(newEnabled[i].quota)
+        );
+      resetCycle = !sameShape;
+    }
 
     if (config) {
       config.directors      = cleaned;
-      config.allocationMode = 'round_robin';
+      config.allocationMode = 'adaptive_quota_round_robin';
       config.isActive       = isActive !== undefined ? isActive : config.isActive;
-      // currentPointer is intentionally NOT modified — Option A
+      if (resetCycle) {
+        config.cycleRemaining = freshCycleRemaining(newEnabled);
+        config.currentPointer = 0;
+      }
+      // else: leave cycleRemaining/currentPointer untouched —
+      // seamless continuation (Option A semantics preserved)
       await config.save();
     } else {
       config = await AllocationConfig.create({
         directors:      cleaned,
-        allocationMode: 'round_robin',
+        allocationMode: 'adaptive_quota_round_robin',
         isActive:       isActive !== undefined ? isActive : true,
+        cycleRemaining: freshCycleRemaining(newEnabled),
         currentPointer: 0,
       });
     }
@@ -126,6 +231,13 @@ const saveConfig = async (req, res) => {
 
     res.json(populated);
     audit.allocationConfigChanged(req, cleaned);
+
+    // Client requirement: regenerate Director_View after allocation
+    // configuration changes. Non-fatal — failures are logged inside
+    // regenerateDirectorView and don't affect the config save response.
+    regenerateDirectorView().catch((e) =>
+      console.error('[AllocationConfig] Director_View regen failed:', e.message)
+    );
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -134,8 +246,12 @@ const saveConfig = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 // POST /api/allocation/preview
 // Returns the upcoming Lead N → Director sequence for given
-// directors[] (no DB change). Starts from the CURRENT
-// currentPointer so the preview matches what will actually happen.
+// directors[] (no DB change). Uses the CURRENT persisted
+// cycleRemaining/currentPointer as the starting state so the
+// preview matches what will actually happen if saved unchanged —
+// or, if the proposed directors/quotas differ from the saved
+// config, simulates from a freshly-initialised cycle using the
+// PROPOSED values (so admins see the effect of edits before saving).
 // Admin only
 // ─────────────────────────────────────────────────────────────
 const previewConfig = async (req, res) => {
@@ -149,35 +265,50 @@ const previewConfig = async (req, res) => {
     if (enabled.length === 0) {
       return res.status(400).json({ message: 'At least one director must be enabled to preview' });
     }
+    const enabledWithQuota = enabled.filter((d) => Number(d.quota) > 0);
+    if (enabledWithQuota.length === 0) {
+      return res.status(400).json({ message: 'At least one enabled director must have a quota greater than 0' });
+    }
 
     // Fetch director names
     const dirIds = directors.map((d) => d.director);
     const users  = await User.find({ _id: { $in: dirIds } }).select('name');
     const nameMap = Object.fromEntries(users.map((u) => [String(u._id), u.name]));
 
-    // Use the CURRENT pointer so the preview shows what happens next
+    // Use the CURRENT persisted cycle state as the starting point
     const existing = await AllocationConfig.findOne();
-    const startPointer = existing ? existing.currentPointer : 0;
+    const startState = existing
+      ? {
+          cycleRemaining: existing.cycleRemaining || [],
+          currentPointer: existing.currentPointer || 0,
+        }
+      : { cycleRemaining: [], currentPointer: 0 };
 
     const cleaned = directors.map((d) => ({
       director:      d.director,
       enabled:       d.enabled !== false,
       sequenceOrder: Number(d.sequenceOrder),
+      quota:         Number(d.quota) || 0,
     }));
 
-    const previewCount = count ? Math.min(Number(count), 50) : 8;
-    const seq = previewSequence(cleaned, startPointer, previewCount);
+    const previewCount = count ? Math.min(Number(count), 50) : 18;
+    const seq = previewSequence(cleaned, startState, previewCount);
 
     const sequence = seq.map((item) => ({
       leadNumber: item.leadNumber,
       director:   nameMap[String(item.director)] || String(item.director),
       directorId: String(item.director),
+      cycleReset: item.cycleReset,
+      remainingAfter: item.remainingAfter.map((r) => ({
+        director:  nameMap[r.director] || r.director,
+        directorId: r.director,
+        remaining: r.remaining,
+      })),
     }));
 
     res.json({
       sequence,
-      enabledCount:  enabled.length,
-      startPointer,
+      enabledCount: enabledWithQuota.length,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -194,7 +325,7 @@ const runAllocation = async (req, res) => {
     const { count } = req.body;
     const config = await AllocationConfig.findOne({ isActive: true });
     if (!config || !config.directors.length) {
-      return res.status(400).json({ message: 'No active allocation config found. Configure director sequence first.' });
+      return res.status(400).json({ message: 'No active allocation config found. Configure directors and quotas first.' });
     }
     if (getEnabledDirectors(config).length === 0) {
       return res.status(400).json({ message: 'All directors are disabled. Enable at least one to run allocation.' });
@@ -275,6 +406,23 @@ const getAllocationStats = async (req, res) => {
 
     const enabledCount = config ? getEnabledDirectors(config).length : 0;
 
+    // cycleRemaining with director names — useful for the admin UI
+    // to show "A=8 B=4 C=4 D=1" style live countdown.
+    let cycleRemaining = [];
+    if (config && (config.cycleRemaining || []).length > 0) {
+      cycleRemaining = config.cycleRemaining.map((c) => {
+        const dirEntry = config.directors.find(
+          (d) => String(d.director?._id || d.director) === String(c.director)
+        );
+        return {
+          directorId: String(c.director),
+          name:       dirEntry?.director?.name || String(c.director),
+          remaining:  c.remaining,
+          quota:      dirEntry?.quota ?? null,
+        };
+      });
+    }
+
     res.json({
       config: config || null,
       unallocated,
@@ -282,7 +430,7 @@ const getAllocationStats = async (req, res) => {
       directorBreakdown,
       currentPointer: config?.currentPointer || 0,
       enabledCount,
-      pointerPosition: enabledCount > 0 ? (config.currentPointer % enabledCount) : 0,
+      cycleRemaining,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -291,13 +439,20 @@ const getAllocationStats = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/allocation/reset-cursor
-// Reset currentPointer to 0 (start the rotation fresh from the
-// first enabled director in sequenceOrder). Admin only.
+// Reset currentPointer to 0 AND cycleRemaining to a fresh cycle
+// (full quotas) for the currently-enabled directors. Admin only.
 // ─────────────────────────────────────────────────────────────
 const resetCursor = async (req, res) => {
   try {
-    await AllocationConfig.updateOne({}, { $set: { currentPointer: 0 } });
-    res.json({ message: 'Allocation pointer reset to position 1' });
+    const config = await AllocationConfig.findOne();
+    if (!config) {
+      return res.status(404).json({ message: 'No allocation config found' });
+    }
+    const enabled = getEnabledDirectors(config);
+    config.currentPointer = 0;
+    config.cycleRemaining = freshCycleRemaining(enabled);
+    await config.save();
+    res.json({ message: 'Allocation cycle reset — starting fresh from the first director' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

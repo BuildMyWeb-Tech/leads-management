@@ -1,5 +1,7 @@
 const Lead = require('../models/Lead');
 const { pickNextDirector } = require('../utils/allocationEngine');
+const syncToSheets = require('../utils/syncToSheets');
+const { regenerateDirectorView } = require('../utils/syncToSheets');
 const audit = require('../utils/auditService');   // FIXED: was missing, caused ERR_HTTP_HEADERS_SENT
 
 // ── Phase 11C — name validation (mirrors frontend ocrEngine.js) ─
@@ -93,6 +95,12 @@ const checkDuplicates = async (req, res) => {
 
 /**
  * POST /api/ocr/import
+ *
+ * On success, each newly inserted lead is appended to
+ * Operational_Leads (via syncToSheets 'create'), and Director_View
+ * is regenerated ONCE after the whole batch completes — per client
+ * requirement: "Regenerate Director_View automatically ... after OCR
+ * bulk imports complete." This avoids N regenerations for N leads.
  */
 const importOcrLeads = async (req, res) => {
   try {
@@ -136,6 +144,10 @@ const importOcrLeads = async (req, res) => {
         status: 'New',
       };
       try {
+        // Adaptive Quota-Based Round Robin — one pick per lead,
+        // preserving interleaved cycle order across the whole batch
+        // (not just within this request — picks continue from the
+        // persisted cycleRemaining/currentPointer).
         const pick = await pickNextDirector();
         if (pick) { leadData.assignedDirector = pick.directorId; leadData.status = 'Allocated'; }
       } catch (_) {}
@@ -156,6 +168,27 @@ const importOcrLeads = async (req, res) => {
     // Non-fatal audit — called AFTER response is sent
     try { audit.leadImportedOCR(req, inserted.length, skipped.length); } catch (_) {}
 
+    // Append each newly-inserted lead to Operational_Leads
+    // (fast path, no Director_View regen per-lead).
+    if (inserted.length > 0) {
+      try {
+        const populated = await Lead.find({ _id: { $in: inserted.map((l) => l._id) } })
+          .populate('assignedDirector', 'name email')
+          .populate('assignedTelecaller', 'name email');
+        for (const lead of populated) {
+          syncToSheets(lead, 'create');
+        }
+      } catch (e) {
+        console.error('[OCR Import] Operational_Leads sync failed:', e.message);
+      }
+
+      // Director_View — regenerate ONCE for the whole batch.
+      // Non-fatal; runs after the response has been sent.
+      regenerateDirectorView().catch((e) =>
+        console.error('[OCR Import] Director_View regen failed:', e.message)
+      );
+    }
+
   } catch (err) {
     // Guard: only send error if headers not already sent
     if (!res.headersSent) {
@@ -164,4 +197,4 @@ const importOcrLeads = async (req, res) => {
   }
 };
 
-module.exports = { checkDuplicates, importOcrLeads };
+module.exports = { checkDuplicates, importOcrLeads, sanitiseName };
