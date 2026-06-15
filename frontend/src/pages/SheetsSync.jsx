@@ -7,7 +7,6 @@ const ALL_COLUMNS = [
   { value: 'phone',            label: 'Phone' },
   { value: 'email',            label: 'Email' },
   { value: 'director',         label: 'Director' },
-  { value: 'telecaller',       label: 'Telecaller' },
   { value: 'status',           label: 'Status' },
   { value: 'source',           label: 'Source' },
   { value: 'budget',           label: 'Budget' },
@@ -216,7 +215,7 @@ export default function SheetsSync() {
   const [syncOnCreate,  setSyncOnCreate]  = useState(true);
   const [syncOnUpdate,  setSyncOnUpdate]  = useState(true);
   const [columnOrder,   setColumnOrder]   = useState([
-    'name','phone','director','telecaller','status','source','budget','notes','createdAt',
+    'name','phone','director','status','source','budget','notes','createdAt',
   ]);
   const [saving,    setSaving]    = useState(false);
   const [verifying, setVerifying] = useState(false);

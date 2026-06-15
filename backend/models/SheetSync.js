@@ -46,7 +46,7 @@ const sheetSyncSchema = new mongoose.Schema(
     // Default order: Name | Phone | Director | Telecaller | Status | Source | Budget | Notes | Created Date
     columnOrder: {
       type: [String],
-      default: ['name','phone','director','telecaller','status','source','budget','notes','createdAt'],
+      default: ['name','phone','director','status','source','budget','notes','createdAt'],
     },
 
     // Sync statistics

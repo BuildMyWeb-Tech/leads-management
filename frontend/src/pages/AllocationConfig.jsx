@@ -36,9 +36,12 @@ function DirectorQuotaRow({
         {index + 1}
       </div>
 
-      {/* Director select */}
+      {/* Director select -- min-w-[7.5rem] stops it collapsing to
+          near-zero width when the row's fixed-width siblings (drag
+          handle, position badge, quota input, toggle, status label,
+          remove button) compete for space in a narrower column. */}
       <select
-        className="input flex-1 text-sm"
+        className="input flex-1 min-w-[7.5rem] text-sm"
         value={entry.director}
         onChange={(e) => onChange(index, 'director', e.target.value)}
       >
@@ -48,9 +51,10 @@ function DirectorQuotaRow({
         ))}
       </select>
 
-      {/* Quota input */}
+      {/* Quota input -- label hidden below lg to save horizontal
+          space; the column header above the list already says "Quota". */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
-        <label className="text-xs text-gray-400 hidden sm:inline">Quota</label>
+        <label className="hidden lg:inline text-xs text-gray-400">Quota</label>
         <input
           type="number"
           min={0}
@@ -58,7 +62,7 @@ function DirectorQuotaRow({
           inputMode="numeric"
           value={entry.quota}
           onChange={(e) => onChange(index, 'quota', e.target.value)}
-          className="input w-16 text-sm text-center py-1"
+          className="input w-14 text-sm text-center py-1"
         />
       </div>
 
@@ -75,8 +79,9 @@ function DirectorQuotaRow({
           transition-transform ${entry.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
       </button>
 
-      {/* Status label */}
-      <span className={`text-xs font-medium w-16 flex-shrink-0
+      {/* Status label -- hidden below lg, where the column gets narrow.
+          The enable/disable toggle alone is sufficient there. */}
+      <span className={`hidden lg:inline text-xs font-medium w-16 flex-shrink-0
         ${entry.enabled ? 'text-green-600' : 'text-gray-400'}`}>
         {entry.enabled ? 'Enabled' : 'Disabled'}
       </span>
@@ -352,10 +357,11 @@ export default function AllocationConfig() {
     finally { setPreviewLoading(false); }
   }, [entries]);
 
-  useEffect(() => {
-    const t = setTimeout(fetchPreview, 400);
-    return () => clearTimeout(t);
-  }, [fetchPreview]);
+  // NOTE: previously this auto-fetched the preview on every entry
+  // change (debounced). Per requirement, the preview is now on-demand
+  // only -- the admin clicks "Show preview" / "Refresh preview" to
+  // see the full upcoming sequence, rather than it recomputing (and
+  // making a request) on every keystroke/toggle.
 
   const handleEntryChange = (index, field, value) =>
     setEntries((prev) => prev.map((e, i) => (i === index ? { ...e, [field]: value } : e)));
@@ -467,7 +473,7 @@ export default function AllocationConfig() {
   }
 
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-7xl">
       <div className="mb-6">
         <h2 className="page-title">Allocation Engine</h2>
         <p className="text-sm text-gray-400 mt-0.5">
@@ -481,7 +487,7 @@ export default function AllocationConfig() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 items-start">
 
         {/* ── Left: Config editor ───────────────── */}
-        <div className="lg:col-span-2 space-y-5">
+        <div className="lg:col-span-3 space-y-5">
 
           {/* Active toggle */}
           <div className="card flex items-center justify-between">
@@ -525,9 +531,9 @@ export default function AllocationConfig() {
               <div className="w-5" />
               <div className="w-6" />
               <span className="flex-1 text-xs font-medium text-gray-400">Director</span>
-              <span className="text-xs font-medium text-gray-400 w-20 text-center">Quota</span>
+              <span className="text-xs font-medium text-gray-400 w-14 text-center">Quota</span>
               <span className="text-xs font-medium text-gray-400 w-11 text-center">Active</span>
-              <span className="text-xs font-medium text-gray-400 w-16">Status</span>
+              <span className="hidden lg:inline text-xs font-medium text-gray-400 w-16">Status</span>
               <div className="w-7" />
             </div>
 
@@ -608,14 +614,53 @@ export default function AllocationConfig() {
         </div>
 
         {/* ── Right: Preview + stats ────────────── */}
-        <div className="lg:col-span-3 space-y-5">
+        <div className="lg:col-span-2 space-y-5">
 
           <div className="card">
-            <h3 className="text-sm font-semibold text-gray-800 mb-3">Live preview</h3>
-            <SequencePreview preview={preview} loading={previewLoading} />
-            {!preview && !previewLoading && (
+            <div className="flex items-center justify-between mb-3 gap-3">
+              <h3 className="text-sm font-semibold text-gray-800">Live preview</h3>
+              <button
+                type="button"
+                onClick={fetchPreview}
+                disabled={previewLoading || entries.filter((e) => e.director).length === 0}
+                className="btn-secondary text-xs py-1.5 px-3 min-h-0"
+              >
+                {previewLoading ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                    Computing...
+                  </>
+                ) : preview ? (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh preview
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    Show preview
+                  </>
+                )}
+              </button>
+            </div>
+            {preview ? (
+              <SequencePreview preview={preview} loading={previewLoading} />
+            ) : (
               <p className="text-xs text-gray-400 text-center py-4">
-                Add directors with a quota to see the upcoming sequence.
+                {entries.filter((e) => e.director).length === 0
+                  ? 'Add directors with a quota, then click "Show preview" to see the upcoming sequence.'
+                  : 'Click "Show preview" to see the upcoming sequence for the current settings.'}
               </p>
             )}
           </div>

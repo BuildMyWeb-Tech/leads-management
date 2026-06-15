@@ -13,8 +13,12 @@
  *       lead on update — see syncToSheets.js).
  *
  *   Director_View (grouped reporting, FIXED columns):
- *     - Always exactly 5 columns, in this order:
- *         Director | Customer Name | Mobile Number | Status | Remarks / Notes
+ *     - Always exactly 4 columns, in this order:
+ *         Director | Customer Name | Mobile Number | Remarks / Notes
+ *       (Status was removed -- Director_View is regenerated
+ *       infrequently, so its Status column went stale almost
+ *       immediately after telecallers update lead status. MongoDB
+ *       remains the source of truth for status.)
  *     - regenerateDirectorView(): fetches leads, groups by director
  *       (preserving each director's internal chronological order),
  *       and rewrites the entire Director_View tab. Called only on
@@ -80,7 +84,6 @@ const DIRECTOR_VIEW_HEADERS = [
   'Director',
   'Customer Name',
   'Mobile Number',
-  'Status',
   'Remarks / Notes',
 ];
 
@@ -117,16 +120,14 @@ const buildRow = (lead, columnOrder) => {
   return columnOrder.map((col) => fieldMap[col] ?? '');
 };
 
-// ── Build a Director_View row — ALWAYS the fixed 5 columns ────
-// Director | Customer Name | Mobile Number | Status | Remarks / Notes
-//   - Status defaults to 'New' if somehow empty (defensive; Lead
-//     model already defaults status to 'New' on creation).
+// ── Build a Director_View row — ALWAYS the fixed 4 columns ────
+// Director | Customer Name | Mobile Number | Remarks / Notes
+//   - Status column removed (see DIRECTOR_VIEW_HEADERS comment).
 //   - Remarks / Notes defaults to '' (blank) — uses lead.notes.
 const buildDirectorViewRow = (lead) => ([
   lead.assignedDirector?.name || '',
   lead.name   || '',
   lead.phone  || '',
-  lead.status || 'New',
   lead.notes  || '',
 ]);
 
@@ -221,7 +222,7 @@ const upsertRow = async (config, lead) => {
   }
 
   const sheets    = getSheetsClient(config.serviceAccountJson);
-  const colOrder  = config.columnOrder || ['name','phone','director','telecaller','status','source','budget','notes','createdAt'];
+  const colOrder  = config.columnOrder || ['name','phone','director','status','source','budget','notes','createdAt'];
   const rowData   = buildRow(lead, colOrder);
   const fullRow   = [...rowData, String(lead._id)]; // append hidden LeadId at end
 
@@ -274,7 +275,7 @@ const appendOperationalRow = async (config, lead) => {
   }
 
   const sheets   = getSheetsClient(config.serviceAccountJson);
-  const colOrder = config.columnOrder || ['name','phone','director','telecaller','status','source','budget','notes','createdAt'];
+  const colOrder = config.columnOrder || ['name','phone','director','status','source','budget','notes','createdAt'];
   const rowData  = buildRow(lead, colOrder);
   const fullRow  = [...rowData, String(lead._id)];
 
@@ -325,7 +326,7 @@ const verifyConnection = async (
 // totalSynced reflects unique leads (rows written), not operations.
 const bulkSync = async (config, leads) => {
   const sheets   = getSheetsClient(config.serviceAccountJson);
-  const colOrder = config.columnOrder || ['name','phone','director','telecaller','status','source','budget','notes','createdAt'];
+  const colOrder = config.columnOrder || ['name','phone','director','status','source','budget','notes','createdAt'];
 
   await ensureSheetExists(sheets, config.spreadsheetId, config.sheetName);
 
