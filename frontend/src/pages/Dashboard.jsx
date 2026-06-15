@@ -253,7 +253,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Allocation engine — Admin only ──────────────── */}
-      {user?.role === 'admin' && allocStats && (
+      {/* {user?.role === 'admin' && allocStats && (
         <div className="card mt-4">
           <div className="flex items-center justify-between mb-3">
             <div>
@@ -293,7 +293,7 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-      )}
+      )} */}
 
       {/* ── Recent leads ─────────────────────────────────── */}
       {(stats?.recentLeads || []).length > 0 && (

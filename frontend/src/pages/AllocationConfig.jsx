@@ -476,12 +476,12 @@ export default function AllocationConfig() {
     <div className="max-w-7xl">
       <div className="mb-6">
         <h2 className="page-title">Allocation Engine</h2>
-        <p className="text-sm text-gray-400 mt-0.5">
+        {/* <p className="text-sm text-gray-400 mt-0.5">
           Adaptive Quota-Based Round Robin — leads interleave across
           directors in sequence order, each receiving up to its quota
           per cycle. When every director's quota is used up, the cycle
           resets and repeats.
-        </p>
+        </p> */}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 items-start">
@@ -513,7 +513,7 @@ export default function AllocationConfig() {
           {/* Director quota editor */}
           <div className="card">
             <div className="flex items-center justify-between mb-1">
-              <h3 className="text-sm font-semibold text-gray-800">Directors & quotas</h3>
+              <h3 className="text-sm font-semibold text-gray-800">Directors & Quota </h3>
               {enabledCount > 0 && (
                 <span className="text-xs text-gray-400">
                   <span className="font-semibold text-gray-600">{enabledCount}</span> in rotation

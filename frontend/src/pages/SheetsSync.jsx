@@ -7,7 +7,7 @@ const ALL_COLUMNS = [
   { value: 'phone',            label: 'Phone' },
   { value: 'email',            label: 'Email' },
   { value: 'director',         label: 'Director' },
-  { value: 'status',           label: 'Status' },
+  // { value: 'status',           label: 'Status' },
   { value: 'source',           label: 'Source' },
   { value: 'budget',           label: 'Budget' },
   { value: 'propertyInterest', label: 'Property Interest' },
@@ -87,86 +87,86 @@ function SyncStatusBadge({ status }) {
   );
 }
 
-function ColumnOrderEditor({ order, onChange }) {
-  const move = (from, to) => {
-    const next = [...order];
-    const [item] = next.splice(from, 1);
-    next.splice(to, 0, item);
-    onChange(next);
-  };
+// function ColumnOrderEditor({ order, onChange }) {
+//   const move = (from, to) => {
+//     const next = [...order];
+//     const [item] = next.splice(from, 1);
+//     next.splice(to, 0, item);
+//     onChange(next);
+//   };
 
-  const toggle = (col) => {
-    if (order.includes(col)) {
-      if (order.length <= 1) return;
-      onChange(order.filter((c) => c !== col));
-    } else {
-      onChange([...order, col]);
-    }
-  };
+//   const toggle = (col) => {
+//     if (order.includes(col)) {
+//       if (order.length <= 1) return;
+//       onChange(order.filter((c) => c !== col));
+//     } else {
+//       onChange([...order, col]);
+//     }
+//   };
 
-  return (
-    <div>
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-        Column order — Operational_Leads sheet
-      </p>
+//   return (
+//     <div>
+//       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+//         Column order — Operational_Leads sheet
+//       </p>
 
-      <div className="space-y-1.5 mb-4">
-        {order.map((col, i) => {
-          const meta = ALL_COLUMNS.find((c) => c.value === col);
-          return (
-            <div key={col} className="flex items-center gap-2 bg-blue-50 border border-blue-100
-                                      rounded-lg px-3 py-2">
-              <span className="text-xs font-bold text-blue-400 w-5 text-center flex-shrink-0">
-                {String.fromCharCode(65 + i)}
-              </span>
-              <span className="text-sm font-medium text-gray-800 flex-1">
-                {meta?.label || col}
-              </span>
-              <div className="flex gap-0.5">
-                <button onClick={() => i > 0 && move(i, i - 1)} disabled={i === 0}
-                  className="p-1 text-gray-400 hover:text-blue-600 disabled:opacity-30 touch-manipulation">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                  </svg>
-                </button>
-                <button onClick={() => i < order.length - 1 && move(i, i + 1)}
-                  disabled={i === order.length - 1}
-                  className="p-1 text-gray-400 hover:text-blue-600 disabled:opacity-30 touch-manipulation">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </div>
-              <button onClick={() => toggle(col)}
-                className="p-1 text-gray-300 hover:text-red-500 touch-manipulation"
-                title="Remove column">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          );
-        })}
-      </div>
+//       <div className="space-y-1.5 mb-4">
+//         {order.map((col, i) => {
+//           const meta = ALL_COLUMNS.find((c) => c.value === col);
+//           return (
+//             <div key={col} className="flex items-center gap-2 bg-blue-50 border border-blue-100
+//                                       rounded-lg px-3 py-2">
+//               <span className="text-xs font-bold text-blue-400 w-5 text-center flex-shrink-0">
+//                 {String.fromCharCode(65 + i)}
+//               </span>
+//               <span className="text-sm font-medium text-gray-800 flex-1">
+//                 {meta?.label || col}
+//               </span>
+//               <div className="flex gap-0.5">
+//                 <button onClick={() => i > 0 && move(i, i - 1)} disabled={i === 0}
+//                   className="p-1 text-gray-400 hover:text-blue-600 disabled:opacity-30 touch-manipulation">
+//                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+//                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+//                   </svg>
+//                 </button>
+//                 <button onClick={() => i < order.length - 1 && move(i, i + 1)}
+//                   disabled={i === order.length - 1}
+//                   className="p-1 text-gray-400 hover:text-blue-600 disabled:opacity-30 touch-manipulation">
+//                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+//                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+//                   </svg>
+//                 </button>
+//               </div>
+//               <button onClick={() => toggle(col)}
+//                 className="p-1 text-gray-300 hover:text-red-500 touch-manipulation"
+//                 title="Remove column">
+//                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+//                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+//                     d="M6 18L18 6M6 6l12 12" />
+//                 </svg>
+//               </button>
+//             </div>
+//           );
+//         })}
+//       </div>
 
-      <p className="text-xs font-medium text-gray-400 mb-2">Add columns</p>
-      <div className="flex flex-wrap gap-1.5">
-        {ALL_COLUMNS.filter((c) => !order.includes(c.value)).map((col) => (
-          <button
-            key={col.value}
-            onClick={() => toggle(col.value)}
-            className="px-2.5 py-1 text-xs border border-dashed border-gray-300 rounded-full
-                       text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors
-                       touch-manipulation"
-          >
-            + {col.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
+//       <p className="text-xs font-medium text-gray-400 mb-2">Add columns</p>
+//       <div className="flex flex-wrap gap-1.5">
+//         {ALL_COLUMNS.filter((c) => !order.includes(c.value)).map((col) => (
+//           <button
+//             key={col.value}
+//             onClick={() => toggle(col.value)}
+//             className="px-2.5 py-1 text-xs border border-dashed border-gray-300 rounded-full
+//                        text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors
+//                        touch-manipulation"
+//           >
+//             + {col.label}
+//           </button>
+//         ))}
+//       </div>
+//     </div>
+//   );
+// }
 
 function SyncStats({ cfg }) {
   return (
@@ -379,10 +379,10 @@ export default function SheetsSync() {
       <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
         <div>
           <h2 className="page-title">Google Sheets Sync</h2>
-          <p className="text-sm text-gray-400 mt-0.5">
+          {/* <p className="text-sm text-gray-400 mt-0.5">
             MongoDB is always the source of truth. Sheets is the reporting layer —
             two tabs: an append-only operational timeline, and a grouped director report.
-          </p>
+          </p> */}
         </div>
         {cfg && <SyncStatusBadge status={cfg.lastSyncStatus} />}
       </div>
@@ -456,31 +456,31 @@ export default function SheetsSync() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="label">Operational sheet tab name</label>
+                <label className="label">All Leads sheet tab name</label>
                 <input
                   className="input"
                   placeholder="Operational_Leads"
                   value={sheetName}
                   onChange={(e) => setSheetName(e.target.value)}
                 />
-                <p className="text-xs text-gray-400 mt-1">
+                {/* <p className="text-xs text-gray-400 mt-1">
                   Append-only timeline — one row per lead, configurable columns below.
                   Created automatically if it doesn't exist.
-                </p>
+                </p> */}
               </div>
 
               <div>
-                <label className="label">Director report tab name</label>
+                <label className="label">Lead Per Director Sheet tab name</label>
                 <input
                   className="input"
                   placeholder="Director_View"
                   value={directorViewSheetName}
                   onChange={(e) => setDirectorViewSheetName(e.target.value)}
                 />
-                <p className="text-xs text-gray-400 mt-1">
+                {/* <p className="text-xs text-gray-400 mt-1">
                   Grouped-by-director report. Fixed 5-column format
                   (see below). Created automatically if it doesn't exist.
-                </p>
+                </p> */}
               </div>
             </div>
 
@@ -507,13 +507,13 @@ export default function SheetsSync() {
                   <span className="text-sm text-gray-700">On lead update</span>
                 </label>
               </div>
-              <p className="text-xs text-gray-400 mt-1">
+              {/* <p className="text-xs text-gray-400 mt-1">
                 Operational_Leads is append-only — updates to existing leads
                 (status changes, reassignments) don't rewrite past rows.
                 Director_View reflects the latest data when it's next
                 regenerated (after imports, "Sync all leads", or allocation
                 config changes).
-              </p>
+              </p> */}
             </div>
           </div>
 
@@ -567,9 +567,9 @@ export default function SheetsSync() {
           </div>
 
           {/* Column order — Operational_Leads only */}
-          <div className="card">
-            <ColumnOrderEditor order={columnOrder} onChange={setColumnOrder} />
-            <div className="mt-3 bg-gray-50 rounded-lg px-3 py-2">
+          {/* <div className="card"> */}
+            {/* <ColumnOrderEditor order={columnOrder} onChange={setColumnOrder} /> */}
+            {/* <div className="mt-3 bg-gray-50 rounded-lg px-3 py-2">
               <p className="text-xs text-gray-500 font-medium">Preview header row (Operational_Leads):</p>
               <p className="text-xs font-mono text-gray-600 mt-1 overflow-x-auto scrollbar-hide">
                 {columnOrder.map((c, i) => {
@@ -577,18 +577,18 @@ export default function SheetsSync() {
                   return `${String.fromCharCode(65 + i)}: ${meta?.label || c}`;
                 }).join('  |  ')}
               </p>
-            </div>
+            </div> */}
 
             {/* Director_View fixed format — read-only info */}
-            <div className="mt-3 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2">
+            {/* <div className="mt-3 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2">
               <p className="text-xs text-indigo-700 font-medium">
                 Director_View columns (fixed — not configurable):
               </p>
               <p className="text-xs font-mono text-indigo-600 mt-1 overflow-x-auto scrollbar-hide">
                 {DIRECTOR_VIEW_COLUMNS.map((c, i) => `${String.fromCharCode(65 + i)}: ${c}`).join('  |  ')}
               </p>
-            </div>
-          </div>
+            </div> */}
+          {/* </div> */}
 
           {/* Save + Test */}
           <div className="flex gap-3 flex-wrap">
@@ -650,7 +650,7 @@ export default function SheetsSync() {
 
               <div className="mt-3 grid grid-cols-1 gap-2">
                 <div className="bg-gray-50 rounded-lg px-3 py-2 flex items-center justify-between">
-                  <span className="text-xs text-gray-500">Director_View last regenerated</span>
+                  <span className="text-xs text-gray-500">Leads Sheet last regenerated</span>
                   <span className="text-xs font-semibold text-gray-700">
                     {cfg.lastDirectorViewSyncAt
                       ? new Date(cfg.lastDirectorViewSyncAt).toLocaleDateString('en-IN', {
@@ -674,11 +674,11 @@ export default function SheetsSync() {
           {/* Manual sync */}
           <div className="card space-y-3">
             <h3 className="text-sm font-semibold text-gray-800">Manual sync</h3>
-            <p className="text-xs text-gray-400">
+            {/* <p className="text-xs text-gray-400">
               Rewrites Operational_Leads with current MongoDB data and
               regenerates Director_View (grouped by director). MongoDB is
               never affected.
-            </p>
+            </p> */}
             <button
               onClick={handleSyncAll}
               disabled={syncing || !cfg?.hasCredentials || !extractedId}
