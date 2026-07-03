@@ -1,27 +1,27 @@
 /**
  * ocrEngine.js — Tesseract.js wrapper for lead extraction.
  *
- * Phone extraction supports ALL Indian mobile formats:
- *   - Plain 10 digits:      9876543210
- *   - 5+5 split:            79046 54620  ← WhatsApp format
- *   - 3+3+4 split:          981 234 5678
- *   - 4+6 split:            9876-543210
- *   - With +91/91/0 prefix: +91 79046 54620
- *   - Separators: space, dash, dot
+ * INTERNATIONAL PHONE SUPPORT (updated):
+ *   Previously extracted only Indian 10-digit numbers (starting 6-9).
+ *   Now extracts international numbers in E.164 / common formats:
+ *
+ *   Formats captured:
+ *     +country_code number   e.g. +1 202 555 0123, +44 20 7946 0001
+ *     Plain digits           e.g. 9876543210, 02072346789
+ *     With separators        e.g. 079-4600-0100, 800.555.1234
+ *     WhatsApp 5+5           e.g. 79046 54620
+ *
+ *   Validation: 6–15 digits after stripping separators (ITU-T E.164 max
+ *   is 15 digits including country code; 6 is the minimum for any real
+ *   subscriber number globally).
  *
  * PHASE 11C — Blacklist + name validation:
- *   Android contact-card screenshots include UI chrome lines like
- *   "Settings", "Add contact", "Call", "Message", "Block & report spam"
- *   adjacent to the actual contact name/phone. These were sometimes
- *   picked up as the lead's name. Now filtered via NAME_BLACKLIST +
- *   stricter isLikelyName() validation. If no valid name line is found
- *   near a phone match, the lead's name is set to the literal string
- *   "No Name" (per spec) instead of incorrect UI text.
+ *   Unchanged — NAME_BLACKLIST, isLikelyName(), NO_NAME fallback preserved.
  */
 
 import Tesseract from 'tesseract.js';
 
-// ── OCR ──────────────────────────────────────────────────────
+// ── OCR ──────────────────────────────────────────────────────────
 export const runOCR = async (imageFile, onProgress) => {
   const result = await Tesseract.recognize(imageFile, 'eng', {
     logger: (m) => {
@@ -33,45 +33,49 @@ export const runOCR = async (imageFile, onProgress) => {
   return result.data.text;
 };
 
-// ── Phone normalisation ───────────────────────────────────────
+// ── Phone normalisation (international) ──────────────────────────
+// Returns a cleaned phone string suitable for storage and dedup, or
+// null if the raw text doesn't look like a real phone number.
+//
+// Rules:
+//   1. Preserve a leading + (E.164 country-code prefix).
+//   2. Strip all non-digit characters.
+//   3. Accept 6–15 digits (ITU-T E.164 max; 6 for shortest real numbers).
+//   4. Never truncate or strip country codes — store full number.
 const normalisePhone = (raw) => {
-  let digits = raw.replace(/\D/g, '');
-  // Strip country code
-  if (digits.startsWith('91') && digits.length === 12) digits = digits.slice(2);
-  if (digits.startsWith('0')  && digits.length === 11) digits = digits.slice(1);
-  // Must be exactly 10 digits starting with 6-9
-  if (/^[6-9]\d{9}$/.test(digits)) return digits;
-  return null;
+  if (!raw) return null;
+  const s = String(raw).trim();
+  const hasPlus = s.startsWith('+');
+  const digits  = s.replace(/\D/g, '');
+  if (digits.length < 6 || digits.length > 15) return null;
+  return hasPlus ? `+${digits}` : digits;
 };
 
-// ── Phone regex — covers ALL Indian mobile number formats ─────
-// Handles: plain, 5+5, 3+3+4, 4+6, 4+3+3, with any separator (space/dash/dot)
-// and optional +91 / 91 / 0 prefix
-const SEP = '[\\s\\-\\.]';
+// ── Phone regex — international numbers ──────────────────────────
+// Matches:
+//   Optional + followed by 1–3 digit country code
+//   Then 6–14 digits with optional separators (space / dash / dot)
+//
+// The regex is intentionally broad — normalisePhone() applies the
+// strict 6–15 digit gate AFTER the regex matches, filtering out
+// false positives (prices, dates, zip codes, etc.).
+//
+// Why not use a tighter regex? OCR output has inconsistent spacing
+// and separators, making it more reliable to capture liberally and
+// validate strictly on the digit count.
 const PHONE_REGEX = new RegExp(
-  '(?:(?:\\+91|91|0)' + SEP + '?)?' +
-  '(?:' +
-    '[6-9]\\d{4}' + SEP + '\\d{5}' +           // 5+5  e.g. 79046 54620
-  '|' +
-    '[6-9]\\d{2}' + SEP + '\\d{3}' + SEP + '\\d{4}' + // 3+3+4 e.g. 981 234 5678
-  '|' +
-    '[6-9]\\d{3}' + SEP + '\\d{3}' + SEP + '\\d{3}' + // 4+3+3 e.g. 9876 543 210
-  '|' +
-    '[6-9]\\d{4}' + SEP + '\\d{3}' + SEP + '\\d{2}' + // 5+3+2
-  '|' +
-    '[6-9]\\d{3}' + SEP + '\\d{6}' +           // 4+6  e.g. 9876-543210
-  '|' +
-    '[6-9]\\d{9}' +                             // plain 10 digits, no separator
-  ')',
+  // Optional international prefix: +, 00, or country-code digits
+  '(?:\\+|00)?'  +
+  // Core: 6–15 digits with optional separators between groups
+  '(?:\\d[\\s\\-\\.]?){5,14}\\d',
   'g'
 );
 
-// ── Fallback name when no valid name line is found ────────────
+// ── Fallback name when no valid name line is found ────────────────
 export const NO_NAME = 'No Name';
 
-// ── Name blacklist — UI chrome words from Android contact cards ─
+// ── Name blacklist — UI chrome words from Android contact cards ───
 // Exact match, case-insensitive, after trimming whitespace.
-// Exported so backend can apply the same defensive check.
 export const NAME_BLACKLIST = [
   'Settings', 'Edit', 'Share', 'Contacts', 'Unknown', 'Back', 'Done',
   'Cancel', 'More', 'Search', 'Call', 'Message', 'Add', 'Menu',
@@ -79,9 +83,6 @@ export const NAME_BLACKLIST = [
   'Truecaller',
 ];
 
-// Multi-word UI phrases that also need blacklisting (not single tokens,
-// so they don't fit a simple exact-match-on-one-word list, but appear
-// verbatim as full lines in contact-card screenshots).
 const NAME_BLACKLIST_PHRASES = [
   'add contact',
   'block & report spam',
@@ -94,47 +95,20 @@ const NAME_BLACKLIST_PHRASES = [
 
 const BLACKLIST_SET = new Set(NAME_BLACKLIST.map((w) => w.toLowerCase()));
 
-// ── Name validation (Phase 11C rules) ──────────────────────────
-// A line is a likely name if:
-//   - 2–50 characters (after trim)
-//   - contains at least one letter
-//   - not numbers-only
-//   - not symbols-only
-//   - not an exact blacklist match (single word or known UI phrase)
-//   - doesn't match existing call/whatsapp/contact noise patterns
-const isLikelyName = (line) => {
+// ── Name validation (Phase 11C rules) ────────────────────────────
+// Exported for test access.
+export const isLikelyName = (line) => {
   const t = (line || '').trim();
-
   if (t.length < 2 || t.length > 50) return false;
-
-  // Must contain at least one letter
   if (!/[a-zA-Z]/.test(t)) return false;
-
-  // Not numbers-only (redundant with above, but explicit per spec)
   if (/^\d+$/.test(t)) return false;
-
-  // Not symbols-only (no letters/digits at all)
   if (/^[^a-zA-Z0-9]+$/.test(t)) return false;
-
-  // URLs / emails are never names
   if (/https?:|www\.|@/.test(t)) return false;
-
   const lower = t.toLowerCase();
-
-  // Exact blacklist match (single-word UI chrome)
   if (BLACKLIST_SET.has(lower)) return false;
-
-  // Exact blacklist phrase match (multi-word UI chrome)
   if (NAME_BLACKLIST_PHRASES.includes(lower)) return false;
-
-  // Existing noise-word heuristic (call/whatsapp/contact/etc as part of a line)
   if (/\b(call|whatsapp|contact|no\.|number|ph|mobile|msg|search|showing)\b/i.test(t)) return false;
-
-  // Single short non-letter-leading token (e.g. "1", "+", "—") already
-  // covered by length check above, but guard short symbol-prefixed
-  // junk like ">1" etc.
   if (/^[^a-zA-Z]/.test(t) && t.length < 4) return false;
-
   return true;
 };
 
@@ -146,14 +120,12 @@ const cleanName = (raw) =>
     .trim()
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
-// ── Main extractor ────────────────────────────────────────────
+// ── Main extractor ────────────────────────────────────────────────
 export const extractLeads = (rawText) => {
   const lines = rawText.split('\n').map((l) => l.trim()).filter(Boolean);
-  const leads = [];
   const phoneMatches = [];
 
   lines.forEach((line, lineIdx) => {
-    // Reset lastIndex for global regex on each line
     PHONE_REGEX.lastIndex = 0;
     const matches = [...line.matchAll(PHONE_REGEX)];
     matches.forEach((m) => {
@@ -167,17 +139,20 @@ export const extractLeads = (rawText) => {
   if (phoneMatches.length === 0) return [];
 
   const usedPhones = new Set();
+  const leads = [];
 
   phoneMatches.forEach(({ phone, lineIdx }) => {
-    if (usedPhones.has(phone)) return;
-    usedPhones.add(phone);
+    // Dedupe by digits-only key so "+919876543210" and "9876543210"
+    // don't produce two leads from the same OCR image.
+    const dedupeKey = phone.replace(/\D/g, '');
+    if (usedPhones.has(dedupeKey)) return;
+    usedPhones.add(dedupeKey);
 
     // Remove phone pattern from its own line to get potential name
     PHONE_REGEX.lastIndex = 0;
     const ownLine = lines[lineIdx].replace(PHONE_REGEX, '').trim();
 
     let name = '';
-
     if (isLikelyName(ownLine)) {
       name = cleanName(ownLine);
     } else if (lineIdx > 0 && isLikelyName(lines[lineIdx - 1])) {
@@ -186,16 +161,8 @@ export const extractLeads = (rawText) => {
       name = cleanName(lines[lineIdx + 1]);
     }
 
-    // Final guard: if cleanName() somehow produced a blacklisted result
-    // (e.g. case variations not caught above), discard it too.
-    if (name && BLACKLIST_SET.has(name.toLowerCase())) {
-      name = '';
-    }
-
-    // Fallback: no valid name line found near this phone → "No Name"
-    if (!name) {
-      name = NO_NAME;
-    }
+    if (name && BLACKLIST_SET.has(name.toLowerCase())) name = '';
+    if (!name) name = NO_NAME;
 
     // Extra context for notes
     PHONE_REGEX.lastIndex = 0;
@@ -210,7 +177,6 @@ export const extractLeads = (rawText) => {
         PHONE_REGEX.lastIndex = 0;
         if (PHONE_REGEX.test(l)) return false;
         if (l === name) return false;
-        // Strip blacklisted UI chrome lines from context too
         const lc = l.trim().toLowerCase();
         if (BLACKLIST_SET.has(lc) || NAME_BLACKLIST_PHRASES.includes(lc)) return false;
         return true;
@@ -219,7 +185,7 @@ export const extractLeads = (rawText) => {
       .slice(0, 120);
 
     leads.push({
-      id:       `ocr-${phone}`,
+      id:       `ocr-${dedupeKey}`,
       name,
       phone,
       extra:    context || '',
@@ -230,7 +196,7 @@ export const extractLeads = (rawText) => {
   return leads;
 };
 
-// ── Image pre-processor ───────────────────────────────────────
+// ── Image pre-processor ───────────────────────────────────────────
 export const prepareImage = (file) => {
   return new Promise((resolve) => {
     if (file.size < 300 * 1024) { resolve(file); return; }

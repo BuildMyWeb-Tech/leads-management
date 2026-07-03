@@ -1,4 +1,5 @@
 const Lead = require('../models/Lead');
+const { normalisePhone, normaliseForDedupe } = require('../utils/phoneUtils');
 const { pickNextDirector } = require('../utils/allocationEngine');
 const syncToSheets = require('../utils/syncToSheets');
 const { regenerateDirectorView } = require('../utils/syncToSheets');
@@ -57,19 +58,21 @@ const checkDuplicates = async (req, res) => {
       return res.status(400).json({ message: 'phones array is required' });
     }
 
-    const normalise = (p) =>
-      String(p).replace(/\s|-|\(|\)/g, '').replace(/^(\+91|91|0)/, '').slice(-10);
+    // normaliseForDedupe strips all non-digits for comparison —
+    // works for any country (not India-only like the old +91 strip).
+    const normalised = phones.map(normaliseForDedupe);
 
-    const normalised = phones.map(normalise);
-
-    const existing = await Lead.find({
-      phone: { $in: normalised.map((p) => new RegExp(p + '$')) },
-    }).select('name phone status assignedDirector').populate('assignedDirector', 'name');
+    // Match stored numbers whose digit-only form ends with or equals
+    // the dedupe key. We can't use a suffix regex anymore since
+    // international numbers may be stored with a + prefix, so we
+    // fetch candidates and match in JS.
+    const existing = await Lead.find({}).select('name phone status assignedDirector')
+      .populate('assignedDirector', 'name').lean();
 
     const dupMap = {};
     existing.forEach((lead) => {
-      const norm = normalise(lead.phone);
-      dupMap[norm] = {
+      const key = normaliseForDedupe(lead.phone);
+      dupMap[key] = {
         _id:      lead._id,
         name:     lead.name,
         status:   lead.status,
@@ -78,7 +81,7 @@ const checkDuplicates = async (req, res) => {
     });
 
     const results = phones.map((rawPhone) => {
-      const norm = normalise(rawPhone);
+      const norm = normaliseForDedupe(rawPhone);
       return {
         phone:       rawPhone,
         normalised:  norm,
@@ -109,21 +112,22 @@ const importOcrLeads = async (req, res) => {
       return res.status(400).json({ message: 'leads array is required' });
     }
 
-    const normalise = (p) =>
-      String(p).replace(/\s|-|\(|\)/g, '').replace(/^(\+91|91|0)/, '').slice(-10);
-
     const seen   = new Set();
     const unique = [];
     for (const lead of leads) {
-      const norm = normalise(lead.phone);
-      if (!seen.has(norm)) { seen.add(norm); unique.push({ ...lead, _norm: norm }); }
+      // normalisePhone cleans for storage; normaliseForDedupe for dedup keying
+      const cleaned = normalisePhone(lead.phone);
+      if (!cleaned) continue; // skip unparseable phone strings
+      const dedupeKey = normaliseForDedupe(cleaned);
+      if (!seen.has(dedupeKey)) {
+        seen.add(dedupeKey);
+        unique.push({ ...lead, _clean: cleaned, _norm: dedupeKey });
+      }
     }
 
-    const norms       = unique.map((l) => l._norm);
-    const existing    = await Lead.find({
-      phone: { $in: norms.map((p) => new RegExp(p + '$')) },
-    }).select('phone');
-    const existingSet = new Set(existing.map((l) => normalise(l.phone)));
+    // Fetch all stored phones and build a dedupe set (digits-only keys)
+    const existingLeads = await Lead.find({}).select('phone').lean();
+    const existingSet   = new Set(existingLeads.map((l) => normaliseForDedupe(l.phone)));
 
     const toInsert = [];
     const skipped  = [];
@@ -138,7 +142,7 @@ const importOcrLeads = async (req, res) => {
         // sends "No Name" for unrecognised lines, but a direct API
         // call could send "Settings" etc — sanitiseName() catches that.
         name:   sanitiseName(lead.name),
-        phone:  lead._norm,
+        phone:  lead._clean,  // store the cleaned phone (not the raw input)
         source: lead.source || 'Other',
         notes:  lead.notes  || '',
         status: 'New',

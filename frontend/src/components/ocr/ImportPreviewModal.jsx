@@ -28,7 +28,10 @@ export default function ImportPreviewModal({ leads: initialLeads, onClose, onImp
         setLeads((prev) =>
           prev.map((lead) => {
             const hit = data.results.find(
-              (r) => r.normalised === lead.phone || r.phone === lead.phone
+              (r) => r.normalised === lead.phone ||
+                     r.phone === lead.phone ||
+                     // also match on digits-only in case stored with/without +
+                     r.normalised === lead.phone.replace(/\D/g, '')
             );
             if (hit?.isDuplicate) {
               return { ...lead, isDuplicate: true, selected: false, existing: hit.existing };
@@ -53,8 +56,20 @@ export default function ImportPreviewModal({ leads: initialLeads, onClose, onImp
 
   const handleImport = async () => {
     if (selectedLeads.length === 0) { toast.error('No leads selected'); return; }
-    const invalid = selectedLeads.filter((l) => !/^[6-9]\d{9}$/.test(l.phone));
-    if (invalid.length > 0) { toast.error(`${invalid.length} invalid phone(s)`); return; }
+
+    // International phone support: accept any cleaned phone string.
+    // Old gate: !/^[6-9]\d{9}$/.test(l.phone) — India-only, rejected all
+    // international numbers. New gate: 6–15 digits minimum after stripping
+    // separators, which covers all real phone numbers worldwide.
+    const invalid = selectedLeads.filter((l) => {
+      if (!l.phone) return true;
+      const digits = String(l.phone).replace(/\D/g, '');
+      return digits.length < 6 || digits.length > 15;
+    });
+    if (invalid.length > 0) {
+      toast.error(`${invalid.length} lead${invalid.length !== 1 ? 's' : ''} have invalid phone numbers`);
+      return;
+    }
 
     setImporting(true);
     try {
@@ -87,10 +102,7 @@ export default function ImportPreviewModal({ leads: initialLeads, onClose, onImp
         onClick={!importing ? onClose : undefined}
       />
 
-      {/* Full-screen on mobile, centered on desktop */}
       <div className="modal-panel">
-
-        {/* Handle — mobile only */}
         <div className="sheet-handle" />
 
         {/* Header */}
@@ -133,13 +145,9 @@ export default function ImportPreviewModal({ leads: initialLeads, onClose, onImp
             </div>
           )}
           <div className="ml-auto flex gap-2">
-            <button onClick={selectAll}   className="text-xs text-blue-600 hover:underline touch-manipulation">
-              Select all
-            </button>
+            <button onClick={selectAll}   className="text-xs text-blue-600 hover:underline touch-manipulation">Select all</button>
             <span className="text-gray-300">·</span>
-            <button onClick={deselectAll} className="text-xs text-gray-500 hover:underline touch-manipulation">
-              Deselect all
-            </button>
+            <button onClick={deselectAll} className="text-xs text-gray-500 hover:underline touch-manipulation">Deselect all</button>
           </div>
         </div>
 
@@ -148,8 +156,7 @@ export default function ImportPreviewModal({ leads: initialLeads, onClose, onImp
           {checking ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <svg className="w-6 h-6 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10"
-                  stroke="currentColor" strokeWidth="4" />
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
               </svg>
               <p className="text-sm text-gray-500">Checking for duplicates…</p>
@@ -157,10 +164,8 @@ export default function ImportPreviewModal({ leads: initialLeads, onClose, onImp
           ) : result ? (
             <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                <svg className="w-8 h-8 text-green-500" fill="none" viewBox="0 0 24 24"
-                  stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M5 13l4 4L19 7" />
+                <svg className="w-8 h-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
               <div>
@@ -178,9 +183,7 @@ export default function ImportPreviewModal({ leads: initialLeads, onClose, onImp
           ) : leads.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <p className="text-sm text-gray-400">No leads found in this image.</p>
-              <p className="text-xs text-gray-400 mt-1">
-                Try a clearer screenshot with visible phone numbers.
-              </p>
+              <p className="text-xs text-gray-400 mt-1">Try a clearer screenshot with visible phone numbers.</p>
             </div>
           ) : (
             leads.map((lead) => (
@@ -193,12 +196,10 @@ export default function ImportPreviewModal({ leads: initialLeads, onClose, onImp
         {!result && (
           <div className="px-4 sm:px-6 py-4 border-t border-gray-100 flex-shrink-0">
             <p className="text-xs text-gray-400 mb-3">
-              Auto-allocates to directors using your configured ratios.
+              Auto-allocates to directors using your configured quotas.
             </p>
             <div className="flex gap-2">
-              <button onClick={onClose} disabled={importing} className="btn-ghost flex-shrink-0">
-                Cancel
-              </button>
+              <button onClick={onClose} disabled={importing} className="btn-ghost flex-shrink-0">Cancel</button>
               <button
                 onClick={handleImport}
                 disabled={importing || checking || selectedLeads.length === 0}
@@ -207,8 +208,7 @@ export default function ImportPreviewModal({ leads: initialLeads, onClose, onImp
                 {importing ? (
                   <>
                     <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10"
-                        stroke="currentColor" strokeWidth="4" />
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                     </svg>
                     Importing…

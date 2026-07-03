@@ -13,8 +13,23 @@ const INITIAL = {
   propertyInterest: '', budget: '', notes: '',
 };
 
+/**
+ * Validates a phone number for international support.
+ * Accepts any number with 6–15 digits after stripping separators,
+ * with an optional leading + (E.164 country-code prefix).
+ * Examples accepted: +12025550123, +919876543210, 9876543210,
+ *   +44 20 7946 0001, 800-555-1234, 079.460.0100
+ */
+const isValidPhone = (raw) => {
+  if (!raw) return false;
+  const s = String(raw).trim();
+  // Preserve + prefix marker, then count digits only
+  const digits = s.replace(/\D/g, '');
+  return digits.length >= 6 && digits.length <= 15;
+};
+
 export default function AddLead() {
-  const navigate    = useNavigate();
+  const navigate      = useNavigate();
   const [form, setForm]     = useState(INITIAL);
   const [loading, setLoading] = useState(false);
 
@@ -26,8 +41,8 @@ export default function AddLead() {
       toast.error('Name and Phone are required');
       return;
     }
-    if (!/^[6-9]\d{9}$/.test(form.phone.replace(/\s/g, ''))) {
-      toast.error('Enter a valid 10-digit mobile number');
+    if (!isValidPhone(form.phone)) {
+      toast.error('Enter a valid phone number (6–15 digits, e.g. +12025550123 or 9876543210)');
       return;
     }
     setLoading(true);
@@ -83,13 +98,15 @@ export default function AddLead() {
                 </label>
                 <input
                   className="input"
-                  placeholder="10-digit mobile"
+                  placeholder="+12025550123 or 9876543210"
                   value={form.phone}
                   onChange={set('phone')}
                   inputMode="tel"
-                  maxLength={10}
                   required
                 />
+                <p className="text-xs text-gray-400 mt-1">
+                  Any format — Indian or international
+                </p>
               </div>
               <div className="sm:col-span-2">
                 <label className="label">Email</label>

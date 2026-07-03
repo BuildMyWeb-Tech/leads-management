@@ -2,6 +2,7 @@ const Lead         = require('../models/Lead');
 const XLSX         = require('xlsx');
 const { pickNextDirector } = require('../utils/allocationEngine');
 const syncToSheets = require('../utils/syncToSheets');
+const { normalisePhone, normaliseForDedupe } = require('../utils/phoneUtils');
 const { regenerateDirectorView } = require('../utils/syncToSheets');
 const { notify }   = require('../utils/pushService');
 const audit        = require('../utils/auditService');   // PHASE 10
@@ -288,9 +289,11 @@ const importCSV = async (req, res) => {
     }
     const leadsToInsert = [];
     for (const r of rows.filter((r) => r[mapping.name] && r[mapping.phone])) {
+      const rawPhone  = normalisePhone(String(r[mapping.phone]).trim());
+      if (!rawPhone) continue; // skip rows with unparseable phone numbers
       const raw = {
         name:   String(r[mapping.name]).trim(),
-        phone:  String(r[mapping.phone]).trim(),
+        phone:  rawPhone,
         email:  mapping.email  ? String(r[mapping.email]).trim()  : '',
         source: LEAD_SOURCES.includes(String(r[mapping.source] || '').trim()) ? String(r[mapping.source]).trim() : 'Other',
         status: LEAD_STATUSES.includes(String(r[mapping.status] || '').trim()) ? String(r[mapping.status]).trim() : 'New',
