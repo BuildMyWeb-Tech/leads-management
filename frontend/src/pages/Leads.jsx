@@ -5,6 +5,9 @@ import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/common/StatusBadge';
 import StatusEditor from '../components/leads/StatusEditor';
 import LeadDetailDrawer from '../components/leads/LeadDetailDrawer';
+import PriorityBadge from '../components/leads/PriorityBadge';
+import FollowUpBadge from '../components/leads/FollowUpBadge';
+import SiteVisitBadge from '../components/leads/SiteVisitBadge';
 import { LEAD_STATUSES, LEAD_SOURCES, STATUS_BAR_COLORS, STATUS_BADGE_CLASSES } from '../constants/leadConstants';
 import toast from 'react-hot-toast';
 
@@ -27,7 +30,10 @@ function MobileLeadCard({ lead, onOpen, onStatusSave, isAdmin }) {
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0">
-          <p className="font-semibold text-gray-900 truncate">{lead.name}</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="font-semibold text-gray-900 truncate">{lead.name}</p>
+            {lead.leadId && <span className="text-xs font-mono text-gray-300">{lead.leadId}</span>}
+          </div>
           <a
             href={`tel:${lead.phone}`}
             onClick={(e) => e.stopPropagation()}
@@ -36,26 +42,30 @@ function MobileLeadCard({ lead, onOpen, onStatusSave, isAdmin }) {
             {lead.phone}
           </a>
         </div>
-        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs
-          font-medium ring-1 ring-inset flex-shrink-0 ${badgeCls}`}>
-          {lead.status}
-        </span>
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs
+            font-medium ring-1 ring-inset ${badgeCls}`}>
+            {lead.status}
+          </span>
+          <PriorityBadge priority={lead.priority} size="sm" />
+        </div>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap text-xs text-gray-400">
-        {lead.source && <span className="bg-gray-50 px-2 py-0.5 rounded">{lead.source}</span>}
-        {lead.assignedDirector && (
-          <span>Dir: <span className="text-gray-600">{lead.assignedDirector.name}</span></span>
-        )}
+        {lead.propertyType && <span className="bg-gray-50 px-2 py-0.5 rounded">{lead.propertyType}</span>}
+        {lead.targetLocation && <span className="truncate max-w-[8rem]">{lead.targetLocation}</span>}
+        {lead.budget && <span>{lead.budget}</span>}
         {lead.assignedTelecaller && (
           <span>TC: <span className="text-gray-600">{lead.assignedTelecaller.name}</span></span>
         )}
-        <span className="ml-auto">
-          {new Date(lead.createdAt).toLocaleDateString('en-IN', {
-            day: '2-digit', month: 'short',
-          })}
-        </span>
       </div>
+
+      {(lead.followUpDate || lead.siteVisits?.length > 0) && (
+        <div className="flex items-center gap-2 flex-wrap mt-2">
+          {lead.followUpDate && <FollowUpBadge followUpDate={lead.followUpDate} status={lead.status} size="sm" />}
+          <SiteVisitBadge siteVisits={lead.siteVisits} />
+        </div>
+      )}
 
       {/* Inline status editor row */}
       <div className="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between gap-2"
@@ -87,6 +97,11 @@ export default function Leads() {
   const [search,       setSearch]       = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
+  // 'createdAt' (default, unchanged behavior) or 'priority' — uses the
+  // backend's existing GET /api/leads?sort=priority support
+  // (leadsController.js, Phase C) — no client-side reordering of an
+  // incomplete/paginated list is done.
+  const [sortMode, setSortMode] = useState('createdAt');
   const [page,  setPage]  = useState(1);
   const [pages, setPages] = useState(1);
   const LIMIT = 25;
@@ -101,6 +116,7 @@ export default function Leads() {
       if (statusFilter) params.status = statusFilter;
       if (sourceFilter) params.source = sourceFilter;
       if (search)       params.search = search;
+      if (sortMode === 'priority') params.sort = 'priority';
       const { data } = await api.get('/leads', { params });
       setLeads(data.leads);
       setTotal(data.total);
@@ -110,23 +126,29 @@ export default function Leads() {
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter, sourceFilter, page]);
+  }, [search, statusFilter, sourceFilter, sortMode, page]);
 
   useEffect(() => {
     const t = setTimeout(fetchLeads, search ? 350 : 0);
     return () => clearTimeout(t);
   }, [fetchLeads]);
 
-  useEffect(() => { setPage(1); }, [search, statusFilter, sourceFilter]);
+  useEffect(() => { setPage(1); }, [search, statusFilter, sourceFilter, sortMode]);
 
-  const handleStatusSave = async (leadId, { status, notes }) => {
+  // PHASE D FIX: previously destructured only {status, notes}, silently
+  // dropping followUpDate (and any other field) before sending to the
+  // API — a pre-existing bug. Now forwards whatever payload the caller
+  // built (status/notes/followUpDate/remarks/siteVisit/profile fields),
+  // matching what StatusEditor and the new drawer sections actually send.
+  const handleStatusSave = async (leadId, payload) => {
     try {
-      const { data: updated } = await api.put(`/leads/${leadId}`, { status, notes });
+      const { data: updated } = await api.put(`/leads/${leadId}`, payload);
       setLeads((prev) => prev.map((l) => (l._id === leadId ? updated : l)));
       if (drawerLead?._id === leadId) setDrawerLead(updated);
-      toast.success('Status updated');
-    } catch {
-      toast.error('Update failed');
+      toast.success('Lead updated');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Update failed');
+      throw err;
     }
   };
 
@@ -251,6 +273,27 @@ export default function Leads() {
               Clear
             </button>
           )}
+          {/* Sort toggle — uses the backend's existing ?sort=priority
+              support (Phase C). Priority filtering/property-type
+              filtering are NOT exposed here because the backend does
+              not yet accept those as query params (reported as a
+              Phase D follow-up rather than faked client-side). */}
+          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden text-xs">
+            <button
+              onClick={() => setSortMode('createdAt')}
+              className={`px-3 py-2 font-medium transition-colors touch-manipulation
+                ${sortMode === 'createdAt' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600'}`}
+            >
+              Recent
+            </button>
+            <button
+              onClick={() => setSortMode('priority')}
+              className={`px-3 py-2 font-medium transition-colors touch-manipulation
+                ${sortMode === 'priority' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600'}`}
+            >
+              Priority
+            </button>
+          </div>
         </div>
 
         {/* ── Content ───────────────────────────────────── */}
@@ -301,13 +344,15 @@ export default function Leads() {
                 <table className="min-w-full">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="table-th">Name</th>
-                      <th className="table-th">Phone</th>
-                      <th className="table-th hidden md:table-cell">Source</th>
+                      <th className="table-th">Lead</th>
+                      <th className="table-th">Mobile</th>
+                      <th className="table-th hidden lg:table-cell">Property</th>
+                      <th className="table-th hidden xl:table-cell">Location</th>
+                      <th className="table-th hidden xl:table-cell">Budget</th>
+                      <th className="table-th">Priority</th>
                       <th className="table-th">Status</th>
-                      <th className="table-th hidden lg:table-cell">Director</th>
+                      <th className="table-th hidden lg:table-cell">Follow-Up / Visit</th>
                       <th className="table-th hidden lg:table-cell">Telecaller</th>
-                      <th className="table-th hidden xl:table-cell">Date</th>
                       <th className="table-th w-16">Action</th>
                     </tr>
                   </thead>
@@ -320,9 +365,7 @@ export default function Leads() {
                       >
                         <td className="table-td">
                           <p className="font-medium text-gray-800 leading-tight">{lead.name}</p>
-                          {lead.email && (
-                            <p className="text-xs text-gray-400 mt-0.5">{lead.email}</p>
-                          )}
+                          <p className="text-xs text-gray-400 mt-0.5 font-mono">{lead.leadId || '—'}</p>
                         </td>
                         <td className="table-td whitespace-nowrap text-gray-600">
                           <a href={`tel:${lead.phone}`} onClick={(e) => e.stopPropagation()}
@@ -330,26 +373,34 @@ export default function Leads() {
                             {lead.phone}
                           </a>
                         </td>
-                        <td className="table-td hidden md:table-cell text-gray-500">
-                          {lead.source}
+                        <td className="table-td hidden lg:table-cell text-gray-500 text-xs">
+                          {lead.propertyType || '—'}
+                          {lead.propertyType === 'Plot' && lead.plotSquareFeet && (
+                            <span className="text-gray-400"> ({lead.plotSquareFeet})</span>
+                          )}
+                        </td>
+                        <td className="table-td hidden xl:table-cell text-gray-500 text-xs truncate max-w-[8rem]">
+                          {lead.targetLocation || '—'}
+                        </td>
+                        <td className="table-td hidden xl:table-cell text-gray-500 text-xs">
+                          {lead.budget || '—'}
+                        </td>
+                        <td className="table-td">
+                          <PriorityBadge priority={lead.priority} size="sm" />
                         </td>
                         <td className="table-td" onClick={(e) => e.stopPropagation()}>
                           <StatusEditor lead={lead} onSave={handleStatusSave} compact />
                         </td>
                         <td className="table-td hidden lg:table-cell text-xs">
-                          {lead.assignedDirector
-                            ? <span className="text-gray-700">{lead.assignedDirector.name}</span>
-                            : <span className="text-orange-400 font-medium">Unassigned</span>}
+                          <div className="flex flex-col gap-1 items-start">
+                            {lead.followUpDate && <FollowUpBadge followUpDate={lead.followUpDate} status={lead.status} size="sm" />}
+                            <SiteVisitBadge siteVisits={lead.siteVisits} />
+                          </div>
                         </td>
                         <td className="table-td hidden lg:table-cell text-xs">
                           {lead.assignedTelecaller
                             ? <span className="text-gray-700">{lead.assignedTelecaller.name}</span>
                             : <span className="text-orange-400 font-medium">Unassigned</span>}
-                        </td>
-                        <td className="table-td hidden xl:table-cell text-gray-400 text-xs whitespace-nowrap">
-                          {new Date(lead.createdAt).toLocaleDateString('en-IN', {
-                            day: '2-digit', month: 'short',
-                          })}
                         </td>
                         <td className="table-td" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1">

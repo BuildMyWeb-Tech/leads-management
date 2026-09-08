@@ -27,9 +27,22 @@ export const LEAD_SOURCES = [
 ];
 
 // Which statuses each role is allowed to set
+// (matches backend TELECALLER_ALLOWED_STATUSES / TL_ALLOWED_STATUSES —
+// backend/controllers/leadsController.js — 'tl' currently gets the
+// same permission set as 'telecaller')
 export const ALLOWED_STATUS_TRANSITIONS = {
   admin:      LEAD_STATUSES,
   director:   LEAD_STATUSES,
+  tl: [
+    'Called',
+    'Follow Up',
+    'Site Visit Planned',
+    'Site Visit Done',
+    'Interested',
+    'Negotiation',
+    'Wrong Number',
+    'Not Interested',
+  ],
   telecaller: [
     'Called',
     'Follow Up',
@@ -40,6 +53,46 @@ export const ALLOWED_STATUS_TRANSITIONS = {
     'Wrong Number',
     'Not Interested',
   ],
+};
+
+// ── PHASE D — Phase B/C-backed lead profile enums ───────────────
+// These mirror backend/models/Lead.js exactly. Kept separate from
+// LEAD_SOURCES/LEAD_STATUSES above (unchanged) so existing stored
+// data and behavior are never disturbed.
+
+export const PROPERTY_TYPES = ['Plot', 'House'];
+
+export const PLOT_SQFT_OPTIONS = ['Below 1200', '1200', 'Above 1200'];
+
+export const PURPOSE_OPTIONS = ['Investment', 'Residential'];
+
+export const PRIORITY_LEVELS = ['Hot', 'Warm', 'Cold'];
+
+export const PRIORITY_BADGE_CLASSES = {
+  Hot:  'bg-red-100 text-red-700 ring-red-200',
+  Warm: 'bg-orange-100 text-orange-700 ring-orange-200',
+  Cold: 'bg-blue-100 text-blue-700 ring-blue-200',
+};
+
+export const PRIORITY_DOT_CLASSES = {
+  Hot:  'bg-red-500',
+  Warm: 'bg-orange-400',
+  Cold: 'bg-blue-400',
+};
+
+// Site visit sub-document status (backend/models/Lead.js siteVisitSchema)
+export const SITE_VISIT_STATUSES = ['planned', 'completed', 'cancelled'];
+
+export const SITE_VISIT_STATUS_LABELS = {
+  planned:   'Planned',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+export const SITE_VISIT_BADGE_CLASSES = {
+  planned:   'bg-purple-100 text-purple-700 ring-purple-200',
+  completed: 'bg-violet-100 text-violet-700 ring-violet-200',
+  cancelled: 'bg-gray-100 text-gray-500 ring-gray-200',
 };
 
 // Visual config for pipeline stages

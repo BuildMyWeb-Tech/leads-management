@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { STATUS_BADGE_CLASSES, ALLOWED_STATUS_TRANSITIONS } from '../../constants/leadConstants';
 import { useAuth } from '../../context/AuthContext';
+import PriorityBadge from '../leads/PriorityBadge';
 
 export default function LeadCard({ lead, onSave }) {
   const { user } = useAuth();
@@ -53,10 +54,13 @@ export default function LeadCard({ lead, onSave }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <p className="font-semibold text-gray-900 truncate">{lead.name}</p>
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs
-              font-medium ring-1 ring-inset flex-shrink-0 ${badgeCls}`}>
-              {lead.status}
-            </span>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <PriorityBadge priority={lead.priority} size="sm" />
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs
+                font-medium ring-1 ring-inset ${badgeCls}`}>
+                {lead.status}
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-3 mt-1">
             <a

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { STATUS_BADGE_CLASSES, STATUS_BAR_COLORS } from '../constants/leadConstants';
 import StatusEditor from '../components/leads/StatusEditor';
 import LeadDetailDrawer from '../components/leads/LeadDetailDrawer';
+import PriorityBadge from '../components/leads/PriorityBadge';
 import LeadCard from '../components/telecaller/LeadCard';
 import toast from 'react-hot-toast';
 
@@ -135,17 +136,22 @@ export default function TelecallerPanel() {
   }, [fetchLeads]);
   useEffect(() => { setPage(1); }, [statusTab, search]);
 
-  const handleStatusSave = async (leadId, { status, notes, followUpDate }) => {
+  // PHASE D FIX: previously destructured only {status, notes,
+  // followUpDate}, so remarks/siteVisit updates from the drawer's new
+  // sections would have been silently dropped for telecallers. Now
+  // forwards the full payload — the backend's telecaller branch
+  // (leadsController.updateLead) already validates/restricts what it
+  // actually accepts.
+  const handleStatusSave = async (leadId, payload) => {
     try {
-      const { data: updated } = await api.put(`/leads/${leadId}`, {
-        status, notes, followUpDate,
-      });
+      const { data: updated } = await api.put(`/leads/${leadId}`, payload);
       setLeads((prev) => prev.map((l) => (l._id === leadId ? updated : l)));
       if (drawerLead?._id === leadId) setDrawerLead(updated);
       toast.success('Updated');
       fetchDashboard();
-    } catch {
-      toast.error('Update failed');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Update failed');
+      throw err;
     }
   };
 
@@ -316,6 +322,7 @@ export default function TelecallerPanel() {
                         <tr className="bg-gray-50 border-b border-gray-200">
                           <th className="table-th">Name</th>
                           <th className="table-th">Phone</th>
+                          <th className="table-th">Priority</th>
                           <th className="table-th">Status</th>
                           <th className="table-th hidden md:table-cell">Follow-up</th>
                           <th className="table-th hidden lg:table-cell">Source</th>
@@ -339,6 +346,9 @@ export default function TelecallerPanel() {
                                   className="text-sm text-blue-500 hover:underline">
                                   {lead.phone}
                                 </a>
+                              </td>
+                              <td className="table-td">
+                                <PriorityBadge priority={lead.priority} size="sm" />
                               </td>
                               <td className="table-td" onClick={(e) => e.stopPropagation()}>
                                 <StatusEditor lead={lead} onSave={handleStatusSave} compact />
