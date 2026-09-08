@@ -119,9 +119,9 @@ export default function App() {
         <Route path="/notifications"
           element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
 
-        {/* Admin + Director */}
+        {/* Admin + Director + TL — equivalent lead-management tier (Phase D sign-off) */}
         <Route path="/leads/add"
-          element={<ProtectedRoute allowedRoles={['admin','director']}><AddLead /></ProtectedRoute>} />
+          element={<ProtectedRoute allowedRoles={['admin','director','tl']}><AddLead /></ProtectedRoute>} />
         <Route path="/allocate"
           element={<ProtectedRoute allowedRoles={['admin','director']}><Allocate /></ProtectedRoute>} />
         <Route path="/director-dashboard"

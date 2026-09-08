@@ -18,16 +18,12 @@ const fmtDateTime = (d) => d ? new Date(d).toLocaleString('en-IN', { day: '2-dig
 /**
  * LeadDetailDrawer — full lead profile view/edit.
  *
- * PERMISSION NOTE (Phase D, matching actual backend behavior — see
- * backend/controllers/leadsController.js updateLead): only the admin
- * role can currently edit propertyType/plotSquareFeet/targetLocation/
- * purpose/budget/propertyInterest/email through the update API —
- * director/tl/telecaller branches only accept status/notes/remarks/
- * followUpDate/assignedTelecaller/siteVisit. The "Edit profile" form
- * below is therefore admin-only, matching that reality rather than
- * offering controls that would silently fail for other roles. This
- * is flagged in the Phase D report as a discovered gap, not silently
- * worked around.
+ * PERMISSION NOTE (Phase D sign-off): admin, director, and tl are one
+ * equivalent permission tier for lead management — all three can edit
+ * propertyType/plotSquareFeet/targetLocation/purpose/budget/
+ * propertyInterest/email through the update API (see
+ * backend/controllers/leadsController.js updateLead). telecaller
+ * remains the separate, restricted tier from Phase C.
  */
 export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
   const { user } = useAuth();
@@ -54,7 +50,7 @@ export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
 
   if (!lead) return null;
 
-  const canEditProfile = user.role === 'admin';
+  const canEditProfile = ['admin', 'director', 'tl'].includes(user.role);
   // status/notes/remarks/followUpDate/siteVisit are all accepted for
   // admin/director/tl/telecaller by the backend (see updateLead) —
   // safe for any authenticated role that can reach this drawer.

@@ -21,7 +21,12 @@ router.use(protect);
 router.get('/dashboard/stats', getDashboardStats);
 
 router.get('/', getLeads);
-router.post('/', authorize('admin', 'director'), createLead);
+// PHASE D SIGN-OFF: admin/director/tl are one equivalent permission
+// tier for lead management, so tl can create leads too. bulk-assign
+// and CSV import remain admin/director-only and admin-only
+// respectively, per the earlier explicit Phase C security-hardening
+// instruction that was not overridden by this decision.
+router.post('/', authorize('admin', 'director', 'tl'), createLead);
 router.post('/bulk-assign', authorize('admin', 'director'), bulkAssign);
 router.post('/import-csv', authorize('admin'), upload.single('file'), importCSV);
 

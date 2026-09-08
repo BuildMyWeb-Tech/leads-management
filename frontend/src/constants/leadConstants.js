@@ -27,22 +27,13 @@ export const LEAD_SOURCES = [
 ];
 
 // Which statuses each role is allowed to set
-// (matches backend TELECALLER_ALLOWED_STATUSES / TL_ALLOWED_STATUSES —
-// backend/controllers/leadsController.js — 'tl' currently gets the
-// same permission set as 'telecaller')
+// (matches backend leadsController.js updateLead — admin/director/tl
+// are one equivalent permission tier for lead management; telecaller
+// remains the separate, restricted tier)
 export const ALLOWED_STATUS_TRANSITIONS = {
   admin:      LEAD_STATUSES,
   director:   LEAD_STATUSES,
-  tl: [
-    'Called',
-    'Follow Up',
-    'Site Visit Planned',
-    'Site Visit Done',
-    'Interested',
-    'Negotiation',
-    'Wrong Number',
-    'Not Interested',
-  ],
+  tl:         LEAD_STATUSES,
   telecaller: [
     'Called',
     'Follow Up',

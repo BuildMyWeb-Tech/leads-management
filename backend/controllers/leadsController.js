@@ -7,7 +7,7 @@ const { regenerateDirectorView } = require('../utils/syncToSheets');
 const { notify }   = require('../utils/pushService');
 const audit        = require('../utils/auditService');   // PHASE 10
 const { generateLeadId } = require('../utils/leadIdGenerator');           // PHASE C
-const { buildLeadVisibilityFilter, getManagedTelecallerIds } = require('../utils/leadVisibility'); // PHASE C
+const { buildLeadVisibilityFilter } = require('../utils/leadVisibility'); // PHASE C
 const { sortLeadsByPriority } = require('../utils/priorityRanking');      // PHASE C
 const { recordCallHistoryEntry, appendSiteVisit } = require('../utils/leadUpdateHelpers'); // PHASE C
 
@@ -22,11 +22,6 @@ const TELECALLER_ALLOWED_STATUSES = [
   'Called','Follow Up','Site Visit Planned','Site Visit Done',
   'Interested','Negotiation','Wrong Number','Not Interested',
 ];
-// PHASE C — TL currently gets the same status-change permissions as
-// telecaller (conservative default; see leadVisibility.js's ambiguity
-// note and the Phase C report's blocking-questions section for the
-// broader TL-permissions decision this stands in for).
-const TL_ALLOWED_STATUSES = TELECALLER_ALLOWED_STATUSES;
 
 // ── GET /api/leads ────────────────────────────────────────────
 // PHASE C: base role scoping now comes from the shared
@@ -174,32 +169,20 @@ const updateLead = async (req, res) => {
     const prevTelecaller = lead.assignedTelecaller?.toString();
     let addedSiteVisit   = null;
 
-    // PHASE C: explicit per-role branches (was previously
-    // telecaller / director / "everyone else" — under that shape the
-    // new 'tl' role would have silently fallen into the unrestricted
-    // admin-equivalent branch. Each role now has its own explicit,
-    // intentional permission set.)
-    if (req.user.role === 'telecaller' || req.user.role === 'tl') {
-      const allowedStatuses = req.user.role === 'tl' ? TL_ALLOWED_STATUSES : TELECALLER_ALLOWED_STATUSES;
+    // PHASE D SIGN-OFF: admin, director, and tl are ONE equivalent
+    // permission tier for lead management (explicit product decision
+    // — not a security gap; see Phase D final verification report).
+    // telecaller remains the separate, restricted tier from Phase C.
+    if (req.user.role === 'telecaller') {
       if (req.body.status !== undefined) {
-        if (!allowedStatuses.includes(req.body.status)) {
-          return res.status(403).json({ message: `Status "${req.body.status}" not allowed for this role` });
+        if (!TELECALLER_ALLOWED_STATUSES.includes(req.body.status)) {
+          return res.status(403).json({ message: `Status "${req.body.status}" not allowed for telecallers` });
         }
         lead.status = req.body.status;
       }
       if (req.body.notes        !== undefined) lead.notes        = req.body.notes;
       if (req.body.remarks      !== undefined) lead.remarks      = req.body.remarks;
       if (req.body.followUpDate !== undefined) lead.followUpDate = req.body.followUpDate || null;
-
-      // A TL may only reassign leads to telecallers they manage —
-      // scoped, non-escalating (mirrors their read-visibility rule).
-      if (req.user.role === 'tl' && req.body.assignedTelecaller !== undefined) {
-        const managedIds = (await getManagedTelecallerIds(req.user._id)).map(String);
-        if (req.body.assignedTelecaller && !managedIds.includes(String(req.body.assignedTelecaller))) {
-          return res.status(403).json({ message: 'Can only assign leads to telecallers you manage' });
-        }
-        lead.assignedTelecaller = req.body.assignedTelecaller || null;
-      }
 
       if (req.body.status !== undefined || req.body.notes !== undefined) {
         recordCallHistoryEntry(lead, { status: lead.status, notes: req.body.notes || lead.notes || '', updatedBy: req.user._id });
@@ -208,17 +191,18 @@ const updateLead = async (req, res) => {
         addedSiteVisit = appendSiteVisit(lead, req.body.siteVisit);
       }
       await lead.save();
-    } else if (req.user.role === 'director') {
-      ['status','notes','remarks','assignedTelecaller','followUpDate'].forEach((f) => {
-        if (req.body[f] !== undefined) lead[f] = req.body[f];
-      });
-      if (req.body.siteVisit !== undefined) {
-        addedSiteVisit = appendSiteVisit(lead, req.body.siteVisit);
-      }
-      await lead.save();
-    } else if (req.user.role === 'admin') {
+    } else if (['admin', 'director', 'tl'].includes(req.user.role)) {
       const { callHistory, siteVisits, siteVisit, ...rest } = req.body;
       Object.assign(lead, rest);
+      // Equivalent to telecaller's own behavior: recording a
+      // status/notes change also appends to callHistory and refreshes
+      // lastCallDetails for admin/director/tl too (previously only
+      // telecaller got this — an inconsistency, not an intentional
+      // restriction, so it's closed here as part of the equivalence
+      // decision).
+      if (req.body.status !== undefined || req.body.notes !== undefined) {
+        recordCallHistoryEntry(lead, { status: lead.status, notes: req.body.notes || lead.notes || '', updatedBy: req.user._id });
+      }
       if (siteVisit !== undefined) {
         addedSiteVisit = appendSiteVisit(lead, siteVisit);
       }
