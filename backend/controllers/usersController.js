@@ -14,13 +14,15 @@ const getUsers = async (req, res) => {
 
 const createUser = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, managedBy } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Name, email, and password are required' });
     }
     const exists = await User.findOne({ email });
     if (exists) return res.status(400).json({ message: 'A user with this email already exists' });
-    const user = await User.create({ name, email, password, role: role || 'telecaller' });
+    // PHASE C: managedBy is optional — omitting it leaves existing
+    // create-user behavior unchanged for admin/director/telecaller.
+    const user = await User.create({ name, email, password, role: role || 'telecaller', managedBy: managedBy || null });
     res.status(201).json(user);
     audit.userCreated(req, user);
   } catch (err) { res.status(500).json({ message: err.message }); }
@@ -28,10 +30,15 @@ const createUser = async (req, res) => {
 
 const updateUser = async (req, res) => {
   try {
-    const { name, email, role, isActive } = req.body;
+    const { name, email, role, isActive, managedBy } = req.body;
+    const update = { name, email, role, isActive };
+    // PHASE C: only touch managedBy when explicitly provided, so
+    // existing update calls that don't send it never accidentally
+    // clear an existing hierarchy link.
+    if (managedBy !== undefined) update.managedBy = managedBy || null;
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      { name, email, role, isActive },
+      update,
       { new: true, runValidators: true }
     ).select('-password');
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -40,7 +47,7 @@ const updateUser = async (req, res) => {
     if (isActive === false) {
       audit.userDeactivated(req, user);
     } else {
-      audit.userUpdated(req, user, { name, email, role, isActive });
+      audit.userUpdated(req, user, { name, email, role, isActive, managedBy });
     }
   } catch (err) { res.status(500).json({ message: err.message }); }
 };

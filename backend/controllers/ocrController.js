@@ -4,6 +4,7 @@ const { pickNextDirector } = require('../utils/allocationEngine');
 const syncToSheets = require('../utils/syncToSheets');
 const { regenerateDirectorView } = require('../utils/syncToSheets');
 const audit = require('../utils/auditService');   // FIXED: was missing, caused ERR_HTTP_HEADERS_SENT
+const { generateLeadId } = require('../utils/leadIdGenerator');   // PHASE C
 
 // ── Phase 11C — name validation (mirrors frontend ocrEngine.js) ─
 // Defensive re-check on the server: a client could call /ocr/import
@@ -155,6 +156,14 @@ const importOcrLeads = async (req, res) => {
         const pick = await pickNextDirector();
         if (pick) { leadData.assignedDirector = pick.directorId; leadData.status = 'Allocated'; }
       } catch (_) {}
+      // PHASE C: insertMany() below bypasses Lead.js's pre('save')
+      // hook, so OCR-imported leads need leadId assigned explicitly —
+      // same atomic Phase B generator used everywhere else.
+      try {
+        leadData.leadId = await generateLeadId(new Date());
+      } catch (e) {
+        console.error('[OCR Import] leadId generation failed for a row:', e.message);
+      }
       toInsert.push(leadData);
     }
 

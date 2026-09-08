@@ -37,6 +37,9 @@ const auditLogSchema = new mongoose.Schema(
         'lead_bulk_assigned',
         'lead_imported_csv',
         'lead_imported_ocr',
+        // PHASE C additions
+        'lead_priority_changed',
+        'lead_site_visit_added',
         // User actions
         'user_login',
         'user_logout',

@@ -139,6 +139,15 @@ leadSchema.pre('save', async function (next) {
       console.error('[Lead] leadId generation failed:', e.message);
     }
   }
+
+  // PHASE C — business rules applied uniformly on every save() path
+  // (manual create, telecaller/director/admin update): plot-field
+  // cleanup + one-way priority escalation. See leadBusinessRules.js
+  // for the full rationale; kept out of controllers deliberately so
+  // the rule lives in exactly one place.
+  const { applyLeadBusinessRules } = require('../utils/leadBusinessRules');
+  applyLeadBusinessRules(this);
+
   next();
 });
 

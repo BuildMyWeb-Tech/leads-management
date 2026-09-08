@@ -6,6 +6,10 @@ const { normalisePhone, normaliseForDedupe } = require('../utils/phoneUtils');
 const { regenerateDirectorView } = require('../utils/syncToSheets');
 const { notify }   = require('../utils/pushService');
 const audit        = require('../utils/auditService');   // PHASE 10
+const { generateLeadId } = require('../utils/leadIdGenerator');           // PHASE C
+const { buildLeadVisibilityFilter, getManagedTelecallerIds } = require('../utils/leadVisibility'); // PHASE C
+const { sortLeadsByPriority } = require('../utils/priorityRanking');      // PHASE C
+const { recordCallHistoryEntry, appendSiteVisit } = require('../utils/leadUpdateHelpers'); // PHASE C
 
 const LEAD_STATUSES = [
   'New','Allocated','Called','Follow Up',
@@ -18,14 +22,25 @@ const TELECALLER_ALLOWED_STATUSES = [
   'Called','Follow Up','Site Visit Planned','Site Visit Done',
   'Interested','Negotiation','Wrong Number','Not Interested',
 ];
+// PHASE C — TL currently gets the same status-change permissions as
+// telecaller (conservative default; see leadVisibility.js's ambiguity
+// note and the Phase C report's blocking-questions section for the
+// broader TL-permissions decision this stands in for).
+const TL_ALLOWED_STATUSES = TELECALLER_ALLOWED_STATUSES;
 
 // ── GET /api/leads ────────────────────────────────────────────
+// PHASE C: base role scoping now comes from the shared
+// buildLeadVisibilityFilter() helper (adds correct 'tl' scoping;
+// admin/director/telecaller behaviour is unchanged from before).
+// Optional `?sort=priority` requests the Phase C dashboard ordering
+// (Booked > Hot > completed visit > upcoming visit > Warm > Cold,
+// see priorityRanking.js) — purely additive; omitting it keeps the
+// exact previous createdAt-desc behaviour. No frontend change reads
+// this parameter yet.
 const getLeads = async (req, res) => {
   try {
-    const { status, source, assignedDirector, assignedTelecaller, search, page = 1, limit = 25 } = req.query;
-    const filter = {};
-    if (req.user.role === 'director')   filter.assignedDirector   = req.user._id;
-    if (req.user.role === 'telecaller') filter.assignedTelecaller = req.user._id;
+    const { status, source, assignedDirector, assignedTelecaller, search, sort, page = 1, limit = 25 } = req.query;
+    const filter = await buildLeadVisibilityFilter(req.user);
     if (status) filter.status = status;
     if (source) filter.source = source;
     if (assignedDirector  && req.user.role === 'admin') filter.assignedDirector  = assignedDirector;
@@ -37,6 +52,24 @@ const getLeads = async (req, res) => {
         { email: { $regex: search, $options: 'i' } },
       ];
     }
+
+    if (sort === 'priority') {
+      // Ranking depends on computed sub-state (site visits, overdue
+      // follow-up), so it's applied in-memory after fetching matching
+      // leads rather than as a DB-level sort. Fine for current data
+      // volumes; a DB-level approach can be revisited later if a
+      // director/admin's full lead list grows large enough to matter.
+      const all = await Lead.find(filter)
+        .populate('assignedDirector',   'name email')
+        .populate('assignedTelecaller', 'name email')
+        .lean();
+      const sorted = sortLeadsByPriority(all);
+      const total  = sorted.length;
+      const p = Number(page), l = Number(limit);
+      const leads = sorted.slice((p - 1) * l, (p - 1) * l + l);
+      return res.json({ leads, total, page: p, pages: Math.ceil(total / l) });
+    }
+
     const total = await Lead.countDocuments(filter);
     const leads = await Lead.find(filter)
       .populate('assignedDirector',   'name email')
@@ -103,9 +136,20 @@ const createLead = async (req, res) => {
 };
 
 // ── GET /api/leads/:id ────────────────────────────────────────
+// PHASE C SECURITY FIX: this endpoint previously had NO role-based
+// visibility restriction — any authenticated user could fetch any
+// lead by ID regardless of role/ownership. Now scoped through the
+// same centralized buildLeadVisibilityFilter() used by getLeads/
+// getDashboardStats (no second/duplicate visibility implementation).
+// Following the existing app convention (see
+// telecallerController.updateMyLead's findOne+404 pattern): a lead
+// that exists but is outside the caller's visibility returns the
+// exact same 404 "Lead not found" as a genuinely missing lead, so the
+// response never discloses whether an inaccessible lead exists.
 const getLead = async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id)
+    const filter = await buildLeadVisibilityFilter(req.user);
+    const lead = await Lead.findOne({ _id: req.params.id, ...filter })
       .populate('assignedDirector',   'name email')
       .populate('assignedTelecaller', 'name email')
       .populate({ path: 'callHistory.updatedBy', select: 'name', strictPopulate: false });
@@ -126,31 +170,62 @@ const updateLead = async (req, res) => {
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
 
     const prevStatus     = lead.status;
+    const prevPriority   = lead.priority;
     const prevTelecaller = lead.assignedTelecaller?.toString();
+    let addedSiteVisit   = null;
 
-    if (req.user.role === 'telecaller') {
+    // PHASE C: explicit per-role branches (was previously
+    // telecaller / director / "everyone else" — under that shape the
+    // new 'tl' role would have silently fallen into the unrestricted
+    // admin-equivalent branch. Each role now has its own explicit,
+    // intentional permission set.)
+    if (req.user.role === 'telecaller' || req.user.role === 'tl') {
+      const allowedStatuses = req.user.role === 'tl' ? TL_ALLOWED_STATUSES : TELECALLER_ALLOWED_STATUSES;
       if (req.body.status !== undefined) {
-        if (!TELECALLER_ALLOWED_STATUSES.includes(req.body.status)) {
-          return res.status(403).json({ message: `Status "${req.body.status}" not allowed for telecallers` });
+        if (!allowedStatuses.includes(req.body.status)) {
+          return res.status(403).json({ message: `Status "${req.body.status}" not allowed for this role` });
         }
         lead.status = req.body.status;
       }
       if (req.body.notes        !== undefined) lead.notes        = req.body.notes;
+      if (req.body.remarks      !== undefined) lead.remarks      = req.body.remarks;
       if (req.body.followUpDate !== undefined) lead.followUpDate = req.body.followUpDate || null;
+
+      // A TL may only reassign leads to telecallers they manage —
+      // scoped, non-escalating (mirrors their read-visibility rule).
+      if (req.user.role === 'tl' && req.body.assignedTelecaller !== undefined) {
+        const managedIds = (await getManagedTelecallerIds(req.user._id)).map(String);
+        if (req.body.assignedTelecaller && !managedIds.includes(String(req.body.assignedTelecaller))) {
+          return res.status(403).json({ message: 'Can only assign leads to telecallers you manage' });
+        }
+        lead.assignedTelecaller = req.body.assignedTelecaller || null;
+      }
+
       if (req.body.status !== undefined || req.body.notes !== undefined) {
-        if (!lead.callHistory) lead.callHistory = [];
-        lead.callHistory.push({ status: lead.status, notes: req.body.notes || lead.notes || '', updatedBy: req.user._id, updatedAt: new Date() });
+        recordCallHistoryEntry(lead, { status: lead.status, notes: req.body.notes || lead.notes || '', updatedBy: req.user._id });
+      }
+      if (req.body.siteVisit !== undefined) {
+        addedSiteVisit = appendSiteVisit(lead, req.body.siteVisit);
       }
       await lead.save();
     } else if (req.user.role === 'director') {
-      ['status','notes','assignedTelecaller','followUpDate'].forEach((f) => {
+      ['status','notes','remarks','assignedTelecaller','followUpDate'].forEach((f) => {
         if (req.body[f] !== undefined) lead[f] = req.body[f];
       });
+      if (req.body.siteVisit !== undefined) {
+        addedSiteVisit = appendSiteVisit(lead, req.body.siteVisit);
+      }
+      await lead.save();
+    } else if (req.user.role === 'admin') {
+      const { callHistory, siteVisits, siteVisit, ...rest } = req.body;
+      Object.assign(lead, rest);
+      if (siteVisit !== undefined) {
+        addedSiteVisit = appendSiteVisit(lead, siteVisit);
+      }
       await lead.save();
     } else {
-      const { callHistory, ...rest } = req.body;
-      Object.assign(lead, rest);
-      await lead.save();
+      // Fail-safe: any unrecognised role gets no write access here.
+      return res.status(403).json({ message: 'Not authorized to update leads' });
     }
 
     const updated = await Lead.findById(lead._id)
@@ -167,7 +242,24 @@ const updateLead = async (req, res) => {
         notify.statusChanged(updated.assignedDirector._id, updated.name, prevStatus, updated.status);
       }
     } else {
-      audit.leadUpdated(req, updated, { notes: req.body.notes, followUpDate: req.body.followUpDate });
+      audit.leadUpdated(req, updated, {
+        notes: req.body.notes,
+        remarks: req.body.remarks,
+        followUpDate: req.body.followUpDate,
+        propertyType: req.body.propertyType,
+        plotSquareFeet: req.body.plotSquareFeet,
+        targetLocation: req.body.targetLocation,
+        purpose: req.body.purpose,
+        lastCallDetails: req.body.lastCallDetails,
+      });
+    }
+
+    if (updated.priority !== prevPriority) {
+      audit.leadPriorityChanged(req, updated, prevPriority, updated.priority);
+    }
+
+    if (addedSiteVisit) {
+      audit.leadSiteVisitAdded(req, updated, addedSiteVisit);
     }
 
     const newTelecaller = updated.assignedTelecaller?._id?.toString();
@@ -304,6 +396,15 @@ const importCSV = async (req, res) => {
         const pick = await pickNextDirector();
         if (pick) { raw.assignedDirector = pick.directorId; raw.status = 'Allocated'; }
       } catch (_) {}
+      // PHASE C: insertMany() below bypasses Lead.js's pre('save')
+      // hook (that's what generates leadId for normal create/update),
+      // so bulk-imported rows need it assigned explicitly here — same
+      // atomic generator from Phase B, no second implementation.
+      try {
+        raw.leadId = await generateLeadId(new Date());
+      } catch (e) {
+        console.error('[CSV Import] leadId generation failed for a row:', e.message);
+      }
       leadsToInsert.push(raw);
     }
     if (!leadsToInsert.length) return res.status(400).json({ message: 'No valid rows found' });
@@ -337,9 +438,9 @@ const importCSV = async (req, res) => {
 // ── GET /api/leads/dashboard/stats ───────────────────────────
 const getDashboardStats = async (req, res) => {
   try {
-    const filter = {};
-    if (req.user.role === 'director')   filter.assignedDirector   = req.user._id;
-    if (req.user.role === 'telecaller') filter.assignedTelecaller = req.user._id;
+    // PHASE C: same shared visibility filter as getLeads — adds
+    // correct 'tl' scoping; admin/director/telecaller unchanged.
+    const filter = await buildLeadVisibilityFilter(req.user);
     const [totalLeads, statusStats, sourceStats, recentLeads, directorStats] = await Promise.all([
       Lead.countDocuments(filter),
       Lead.aggregate([{ $match: filter }, { $group: { _id: '$status', count: { $sum: 1 } } }, { $sort: { count: -1 } }]),

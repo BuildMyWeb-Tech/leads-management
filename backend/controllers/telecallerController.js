@@ -1,4 +1,6 @@
 const Lead = require('../models/Lead');
+const audit = require('../utils/auditService');                             // PHASE C
+const { recordCallHistoryEntry, appendSiteVisit } = require('../utils/leadUpdateHelpers'); // PHASE C
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/telecaller/dashboard
@@ -98,10 +100,12 @@ const updateMyLead = async (req, res) => {
       'Interested','Negotiation','Wrong Number','Not Interested',
     ];
 
-    const { status, notes, followUpDate } = req.body;
+    const { status, notes, remarks, followUpDate, siteVisit } = req.body;
 
-    // Track previous status for history
-    const prevStatus = lead.status;
+    // Track previous status/priority for audit
+    const prevStatus   = lead.status;
+    const prevPriority = lead.priority;
+    let addedSiteVisit = null;
 
     if (status !== undefined) {
       if (!ALLOWED.includes(status)) {
@@ -109,18 +113,21 @@ const updateMyLead = async (req, res) => {
       }
       lead.status = status;
     }
-    if (notes      !== undefined) lead.notes      = notes;
+    if (notes        !== undefined) lead.notes        = notes;
+    if (remarks      !== undefined) lead.remarks      = remarks;         // PHASE C
     if (followUpDate !== undefined) lead.followUpDate = followUpDate || null;
 
-    // Append to call history whenever status or notes change
+    // Append to call history whenever status or notes change — also
+    // refreshes lastCallDetails (PHASE C). callHistory itself is only
+    // ever appended to, never overwritten.
     if (status !== undefined || notes !== undefined) {
-      if (!lead.callHistory) lead.callHistory = [];
-      lead.callHistory.push({
-        status:    lead.status,
-        notes:     notes || lead.notes || '',
-        updatedBy: req.user._id,
-        updatedAt: new Date(),
-      });
+      recordCallHistoryEntry(lead, { status: lead.status, notes: notes || lead.notes || '', updatedBy: req.user._id });
+    }
+
+    // PHASE C: append-only site visit entry (planned/completed) —
+    // never replaces the array, so reschedules keep history.
+    if (siteVisit !== undefined) {
+      addedSiteVisit = appendSiteVisit(lead, siteVisit);
     }
 
     await lead.save();
@@ -131,6 +138,19 @@ const updateMyLead = async (req, res) => {
       .populate({ path: 'callHistory.updatedBy', select: 'name', strictPopulate: false });
 
     res.json(updated);
+
+    // PHASE C audit side effects (mirrors leadsController.updateLead)
+    if (updated.status !== prevStatus) {
+      audit.leadStatusChanged(req, updated, prevStatus, updated.status);
+    } else if (notes !== undefined || remarks !== undefined || followUpDate !== undefined) {
+      audit.leadUpdated(req, updated, { notes, remarks, followUpDate });
+    }
+    if (updated.priority !== prevPriority) {
+      audit.leadPriorityChanged(req, updated, prevPriority, updated.priority);
+    }
+    if (addedSiteVisit) {
+      audit.leadSiteVisitAdded(req, updated, addedSiteVisit);
+    }
   } catch (err) {
     res.status(400).json({ message: err.message });
   }

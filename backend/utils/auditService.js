@@ -109,6 +109,21 @@ const leadBulkAssigned = (req, count, directorName, telecallerName) =>
     `${count} lead(s) bulk-assigned${directorName ? ` to director ${directorName}` : ''}${telecallerName ? ` to telecaller ${telecallerName}` : ''}`
   );
 
+// PHASE C — priority + site visit shortcuts
+const leadPriorityChanged = (req, lead, oldPriority, newPriority) =>
+  log(req, 'lead_priority_changed',
+    { type: 'lead', _id: lead._id, name: lead.name, phone: lead.phone },
+    { before: { priority: oldPriority }, after: { priority: newPriority } },
+    `Priority changed: "${lead.name}" → ${oldPriority} → ${newPriority}`
+  );
+
+const leadSiteVisitAdded = (req, lead, visit) =>
+  log(req, 'lead_site_visit_added',
+    { type: 'lead', _id: lead._id, name: lead.name, phone: lead.phone },
+    { before: null, after: { status: visit.status, plannedDate: visit.plannedDate, completedDate: visit.completedDate } },
+    `Site visit (${visit.status}) recorded for "${lead.name}"`
+  );
+
 const leadImportedCSV = (req, count) =>
   log(req, 'lead_imported_csv',
     { type: 'lead' },
@@ -187,6 +202,7 @@ module.exports = {
   log,
   leadCreated, leadStatusChanged, leadUpdated, leadDeleted,
   leadAssignedDirector, leadAssignedTelecaller, leadBulkAssigned,
+  leadPriorityChanged, leadSiteVisitAdded,
   leadImportedCSV, leadImportedOCR,
   userLogin, userCreated, userUpdated, userDeactivated,
   allocationRun, allocationConfigChanged,
