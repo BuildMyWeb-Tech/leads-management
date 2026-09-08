@@ -8,10 +8,20 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: true },
     role: {
       type: String,
-      enum: ['admin', 'director', 'telecaller'],
+      // PHASE B: 'tl' added as a NEW role (not a rename of
+      // 'director' — no existing users are migrated to it). Intended
+      // future hierarchy: admin -> director -> tl -> telecaller.
+      enum: ['admin', 'director', 'tl', 'telecaller'],
       default: 'telecaller',
     },
     isActive: { type: Boolean, default: true },
+
+    // PHASE B — TL-ready hierarchy scaffold only. Optional/nullable
+    // so all existing admin/director/telecaller users remain valid
+    // untouched. No permissions/dashboard logic reads this yet.
+    // Intended future use: tl.managedBy = director._id,
+    // telecaller.managedBy = tl._id.
+    managedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 
     // PHASE 9 — per-user notification preferences
     notificationPrefs: {
@@ -40,5 +50,8 @@ userSchema.methods.toJSON = function () {
   delete obj.password;
   return obj;
 };
+
+// PHASE B — supports future "TL's team" / "director's TLs" lookups.
+userSchema.index({ managedBy: 1 });
 
 module.exports = mongoose.model('User', userSchema);
