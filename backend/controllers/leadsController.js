@@ -36,21 +36,28 @@ const TELECALLER_ALLOWED_STATUSES = [
 // this parameter yet.
 const getLeads = async (req, res) => {
   try {
-    const { status, source, assignedDirector, assignedTelecaller, search, sort, page = 1, limit = 25 } = req.query;
+    const { status, source, assignedDirector, assignedTelecaller, search, sort, page = 1, limit = 25, priority, propertyType } = req.query;
     const filter = await buildLeadVisibilityFilter(req.user);
     if (status) filter.status = status;
     if (source) filter.source = source;
     if (assignedDirector  && req.user.role === 'admin') filter.assignedDirector  = assignedDirector;
     if (assignedTelecaller && req.user.role !== 'telecaller') filter.assignedTelecaller = assignedTelecaller;
+    // PHASE F: priority and propertyType filters (read-only; never mutate priority)
+    const VALID_PRIORITIES    = ['Hot', 'Warm', 'Cold'];
+    const VALID_PROPERTY_TYPES = ['Plot', 'House'];
+    if (priority     && VALID_PRIORITIES.includes(priority))       filter.priority     = priority;
+    if (propertyType && VALID_PROPERTY_TYPES.includes(propertyType)) filter.propertyType = propertyType;
     if (search) {
       // PHASE E: escape regex metacharacters so search text is always
       // matched literally (see utils/searchUtils.js) — behaviour for
       // ordinary text is unchanged.
       const safeSearch = escapeRegex(search);
+      // PHASE F: also search by leadId
       filter.$or = [
-        { name:  { $regex: safeSearch, $options: 'i' } },
-        { phone: { $regex: safeSearch, $options: 'i' } },
-        { email: { $regex: safeSearch, $options: 'i' } },
+        { name:   { $regex: safeSearch, $options: 'i' } },
+        { phone:  { $regex: safeSearch, $options: 'i' } },
+        { email:  { $regex: safeSearch, $options: 'i' } },
+        { leadId: { $regex: safeSearch, $options: 'i' } },
       ];
     }
 
@@ -183,6 +190,12 @@ const updateLead = async (req, res) => {
     // — not a security gap; see Phase D final verification report).
     // telecaller remains the separate, restricted tier from Phase C.
     if (req.user.role === 'telecaller') {
+      // PHASE F: enforce ownership — telecaller may only update a lead
+      // assigned to them. Return 404 so callers cannot enumerate
+      // other telecallers' lead IDs through error-code differences.
+      if (lead.assignedTelecaller?.toString() !== req.user._id.toString()) {
+        return res.status(404).json({ message: 'Lead not found' });
+      }
       if (req.body.status !== undefined) {
         if (!TELECALLER_ALLOWED_STATUSES.includes(req.body.status)) {
           return res.status(403).json({ message: `Status "${req.body.status}" not allowed for telecallers` });

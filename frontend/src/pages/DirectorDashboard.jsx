@@ -102,9 +102,9 @@ export default function DirectorDashboard() {
     }
   }, [user.role, directors, location.search]);
 
-  const handleStatusSave = async (leadId, { status, notes }) => {
+  const handleStatusSave = async (leadId, payload) => {
     try {
-      await api.put(`/leads/${leadId}`, { status, notes });
+      await api.put(`/leads/${leadId}`, payload);
       toast.success('Status updated');
       fetchData();
     } catch {
@@ -130,9 +130,13 @@ export default function DirectorDashboard() {
       {/* ── Header ──────────────────────────────────────── */}
       <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
         <div>
-          <h2 className="page-title">Director Dashboard</h2>
+          <h2 className="page-title">
+            {user.role === 'tl' ? 'Team Panel' : 'Director Dashboard'}
+          </h2>
           <p className="text-sm text-gray-400 mt-0.5">
-            {user.role === 'director' ? 'Your leads and team performance' : 'Director performance overview'}
+            {user.role === 'director' ? 'Your leads and team performance'
+              : user.role === 'tl' ? 'Your team\'s leads and performance'
+              : 'Director performance overview'}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">

@@ -125,7 +125,7 @@ export default function App() {
         <Route path="/allocate"
           element={<ProtectedRoute allowedRoles={['admin','director']}><Allocate /></ProtectedRoute>} />
         <Route path="/director-dashboard"
-          element={<ProtectedRoute allowedRoles={['admin','director']}><DirectorDashboard /></ProtectedRoute>} />
+          element={<ProtectedRoute allowedRoles={['admin','director','tl']}><DirectorDashboard /></ProtectedRoute>} />
         <Route path="/ocr-capture"
           element={<ProtectedRoute allowedRoles={['admin','director']}><OcrCapture /></ProtectedRoute>} />
 

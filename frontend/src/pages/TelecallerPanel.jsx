@@ -11,12 +11,12 @@ import toast from 'react-hot-toast';
 function KpiStrip({ kpis }) {
   const items = [
     { label: 'My leads',  value: kpis.totalLeads,      color: 'text-gray-900' },
-    { label: 'Today',     value: kpis.todayFollowUps,  color: 'text-blue-600',   sub: 'follow-ups' },
-    { label: 'Overdue',   value: kpis.overdueFollowUps,
-      color: kpis.overdueFollowUps > 0 ? 'text-red-500' : 'text-green-600' },
+    { label: 'Today',     value: kpis.todayCount,      color: 'text-blue-600',   sub: 'follow-ups' },
+    { label: 'Overdue',   value: kpis.overdueCount,
+      color: kpis.overdueCount > 0 ? 'text-red-500' : 'text-green-600' },
     { label: 'Interested',value: kpis.interested,      color: 'text-green-600' },
     { label: 'Booked',    value: kpis.booked,          color: 'text-emerald-600' },
-    { label: 'Conv%',     value: `${kpis.convRate}%`,  color: 'text-blue-700' },
+    { label: 'Conv%',     value: `${kpis.conversionRate}%`, color: 'text-blue-700' },
   ];
   return (
     <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4">
@@ -415,7 +415,7 @@ export default function TelecallerPanel() {
                       : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                 >
                   {t === 'followups'
-                    ? `Follow-ups (${dashData?.upcomingFollowUps?.length || 0})`
+                    ? `Follow-ups (${dashData?.todayFollowUps?.length || 0})`
                     : 'Overview'}
                 </button>
               ))}
@@ -460,18 +460,18 @@ export default function TelecallerPanel() {
 
             {rightTab === 'followups' && (
               <div className="card flex-1 p-0 overflow-hidden">
-                {(dashData?.upcomingFollowUps || []).length === 0 ? (
+                {(dashData?.todayFollowUps || []).length === 0 ? (
                   <div className="py-12 text-center px-4">
                     <svg className="w-10 h-10 text-green-200 mx-auto mb-2" fill="none"
                       viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                         d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <p className="text-xs text-gray-400">No upcoming follow-ups</p>
+                    <p className="text-xs text-gray-400">No follow-ups due today</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-gray-50 overflow-y-auto max-h-96 scrollbar-thin">
-                    {dashData.upcomingFollowUps.map((lead) => (
+                    {dashData.todayFollowUps.map((lead) => (
                       <FollowUpItem key={lead._id} lead={lead} onOpen={setDrawerLead} />
                     ))}
                   </div>

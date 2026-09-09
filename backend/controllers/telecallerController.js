@@ -69,6 +69,8 @@ const getTelecallerDashboard = async (req, res) => {
       kpis: {
         totalLeads, called, followUp, interested,
         booked, notInterested, siteVisit, weekLeads, conversionRate,
+        overdueCount: overdueFollowUps.length,
+        todayCount:   todayFollowUps.length,
       },
       statusBreakdown,
       todayFollowUps,

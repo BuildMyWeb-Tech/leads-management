@@ -21,12 +21,19 @@ const toObjectId = (id) => {
 const getDirectorDashboard = async (req, res) => {
   try {
     const isAdmin = req.user.role === 'admin';
+    const isTL    = req.user.role === 'tl';
 
     // Determine the scope filter
     let baseFilter    = {};   // for find/countDocuments
     let baseFilterAgg = {};   // for aggregate (needs ObjectId)
 
-    if (!isAdmin) {
+    if (isTL) {
+      // TL → scope to leads assigned to their managed telecallers only
+      const managedTCs = await User.find({ role: 'telecaller', managedBy: req.user._id }, '_id').lean();
+      const tcIds      = managedTCs.map((tc) => tc._id);
+      baseFilter    = { assignedTelecaller: { $in: tcIds } };
+      baseFilterAgg = { assignedTelecaller: { $in: tcIds } };
+    } else if (!isAdmin) {
       // Director → own leads only
       baseFilter    = { assignedDirector: req.user._id };
       baseFilterAgg = { assignedDirector: req.user._id };
@@ -183,9 +190,15 @@ const getDirectorDashboard = async (req, res) => {
 const getMyTelecallers = async (req, res) => {
   try {
     const isAdmin = req.user.role === 'admin';
+    const isTL    = req.user.role === 'tl';
     let matchFilter = {};
 
-    if (!isAdmin) {
+    if (isTL) {
+      // TL → scope to leads assigned to their managed telecallers only
+      const managedTCs = await User.find({ role: 'telecaller', managedBy: req.user._id }, '_id').lean();
+      const tcIds      = managedTCs.map((tc) => tc._id);
+      matchFilter = { assignedTelecaller: { $in: tcIds } };
+    } else if (!isAdmin) {
       matchFilter = { assignedDirector: req.user._id };
     } else if (req.query.directorId) {
       const oid = toObjectId(req.query.directorId);

@@ -27,6 +27,14 @@ const NAV_LINKS = [
     </svg>,
   },
   {
+    to: '/director-dashboard', label: 'Team Panel',
+    roles: ['tl'],
+    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+    </svg>,
+  },
+  {
     to: '/my-leads', label: 'My Leads',
     roles: ['telecaller'],
     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -68,19 +76,14 @@ const NAV_LINKS = [
         d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
     </svg>,
   },
-  // {
-  //   to: '/notifications', label: 'Notifications',
-  //   roles: ['admin','director','telecaller'],
-  //   icon: <BellIcon />,
-  // },
-  // {
-  //   to: '/leads/import', label: 'Import CSV',
-  //   roles: ['admin'],
-  //   icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-  //     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-  //       d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-  //   </svg>,
-  // },
+  {
+    to: '/leads/import', label: 'Import CSV',
+    roles: ['admin'],
+    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+    </svg>,
+  },
   {
     to: '/allocation-config', label: 'Allocation Engine',
     roles: ['admin'],
@@ -89,14 +92,14 @@ const NAV_LINKS = [
         d="M13 10V3L4 14h7v7l9-11h-7z" />
     </svg>,
   },
-  // {
-  //   to: '/audit-logs', label: 'Audit Logs',
-  //   roles: ['admin'],
-  //   icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-  //     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-  //       d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-  //   </svg>,
-  // },
+  {
+    to: '/audit-logs', label: 'Audit Logs',
+    roles: ['admin'],
+    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+    </svg>,
+  },
   {
     to: '/sheets-sync', label: 'Sheets Sync',
     roles: ['admin'],
@@ -110,9 +113,10 @@ const NAV_LINKS = [
 const ROLE_BADGE = {
   admin:      'bg-purple-100 text-purple-700',
   director:   'bg-blue-100 text-blue-700',
+  tl:         'bg-teal-100 text-teal-700',
   telecaller: 'bg-green-100 text-green-700',
 };
-const ROLE_LABEL  = { admin: 'Admin', director: 'Director', telecaller: 'Telecaller' };
+const ROLE_LABEL  = { admin: 'Admin', director: 'Director', tl: 'Team Lead', telecaller: 'Telecaller' };
 const ADMIN_ONLY  = ['Import CSV', 'Allocation Engine', 'Sheets Sync', 'Audit Logs'];
 
 /**

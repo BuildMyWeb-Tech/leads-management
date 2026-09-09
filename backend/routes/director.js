@@ -4,7 +4,7 @@ const { getDirectorDashboard, getMyTelecallers } = require('../controllers/direc
 const { protect, authorize } = require('../middleware/auth');
 
 router.use(protect);
-router.use(authorize('admin', 'director'));
+router.use(authorize('admin', 'director', 'tl'));
 
 router.get('/dashboard',   getDirectorDashboard);
 router.get('/telecallers', getMyTelecallers);

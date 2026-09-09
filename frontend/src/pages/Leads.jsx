@@ -94,9 +94,11 @@ export default function Leads() {
   const [total,  setTotal]  = useState(0);
   const [loading, setLoading] = useState(false);
 
-  const [search,       setSearch]       = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [sourceFilter, setSourceFilter] = useState('');
+  const [search,           setSearch]           = useState('');
+  const [statusFilter,     setStatusFilter]     = useState('');
+  const [sourceFilter,     setSourceFilter]     = useState('');
+  const [priorityFilter,   setPriorityFilter]   = useState('');
+  const [propertyFilter,   setPropertyFilter]   = useState('');
   // 'createdAt' (default, unchanged behavior) or 'priority' — uses the
   // backend's existing GET /api/leads?sort=priority support
   // (leadsController.js, Phase C) — no client-side reordering of an
@@ -113,9 +115,11 @@ export default function Leads() {
     setLoading(true);
     try {
       const params = { page, limit: LIMIT };
-      if (statusFilter) params.status = statusFilter;
-      if (sourceFilter) params.source = sourceFilter;
-      if (search)       params.search = search;
+      if (statusFilter)   params.status       = statusFilter;
+      if (sourceFilter)   params.source       = sourceFilter;
+      if (priorityFilter) params.priority     = priorityFilter;
+      if (propertyFilter) params.propertyType = propertyFilter;
+      if (search)         params.search       = search;
       if (sortMode === 'priority') params.sort = 'priority';
       const { data } = await api.get('/leads', { params });
       setLeads(data.leads);
@@ -126,14 +130,14 @@ export default function Leads() {
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter, sourceFilter, sortMode, page]);
+  }, [search, statusFilter, sourceFilter, priorityFilter, propertyFilter, sortMode, page]);
 
   useEffect(() => {
     const t = setTimeout(fetchLeads, search ? 350 : 0);
     return () => clearTimeout(t);
   }, [fetchLeads]);
 
-  useEffect(() => { setPage(1); }, [search, statusFilter, sourceFilter, sortMode]);
+  useEffect(() => { setPage(1); }, [search, statusFilter, sourceFilter, priorityFilter, propertyFilter, sortMode]);
 
   // PHASE D FIX: previously destructured only {status, notes}, silently
   // dropping followUpDate (and any other field) before sending to the
@@ -165,9 +169,10 @@ export default function Leads() {
   };
 
   const clearFilters = () => {
-    setSearch(''); setStatusFilter(''); setSourceFilter(''); setPage(1);
+    setSearch(''); setStatusFilter(''); setSourceFilter('');
+    setPriorityFilter(''); setPropertyFilter(''); setPage(1);
   };
-  const hasFilters = search || statusFilter || sourceFilter;
+  const hasFilters = search || statusFilter || sourceFilter || priorityFilter || propertyFilter;
 
   return (
     <>
@@ -198,7 +203,7 @@ export default function Leads() {
                                  flex items-center justify-center font-bold">!</span>
               )}
             </button>
-            {(user.role === 'admin' || user.role === 'director') && (
+            {['admin', 'director', 'tl'].includes(user.role) && (
               <Link to="/leads/add" className="btn-primary text-sm">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -251,7 +256,7 @@ export default function Leads() {
             </svg>
             <input
               className="input pl-9"
-              placeholder="Search name, phone, email..."
+              placeholder="Search name, phone, email, lead ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -264,6 +269,25 @@ export default function Leads() {
             <option value="">All Sources</option>
             {LEAD_SOURCES.map((s) => <option key={s}>{s}</option>)}
           </select>
+          <select
+            className="input sm:w-36"
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value)}
+          >
+            <option value="">All Priority</option>
+            <option value="Hot">Hot</option>
+            <option value="Warm">Warm</option>
+            <option value="Cold">Cold</option>
+          </select>
+          <select
+            className="input sm:w-40"
+            value={propertyFilter}
+            onChange={(e) => setPropertyFilter(e.target.value)}
+          >
+            <option value="">All Property Types</option>
+            <option value="Plot">Plot</option>
+            <option value="House">House</option>
+          </select>
           {hasFilters && (
             <button onClick={clearFilters} className="btn-ghost text-xs">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -273,11 +297,7 @@ export default function Leads() {
               Clear
             </button>
           )}
-          {/* Sort toggle — uses the backend's existing ?sort=priority
-              support (Phase C). Priority filtering/property-type
-              filtering are NOT exposed here because the backend does
-              not yet accept those as query params (reported as a
-              Phase D follow-up rather than faked client-side). */}
+          {/* Sort toggle — uses the backend's existing ?sort=priority support */}
           <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden text-xs">
             <button
               onClick={() => setSortMode('createdAt')}
@@ -317,7 +337,7 @@ export default function Leads() {
               </>
             ) : (
               <>No leads yet.{' '}
-                {(user.role === 'admin' || user.role === 'director') && (
+                {['admin', 'director', 'tl'].includes(user.role) && (
                   <Link to="/leads/add" className="text-blue-600 hover:underline">Add one?</Link>
                 )}
               </>
