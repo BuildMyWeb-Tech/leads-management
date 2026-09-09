@@ -22,6 +22,13 @@ const protect = async (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ message: 'User no longer exists' });
     }
+    // P0-002: Reject tokens for deactivated accounts immediately.
+    // isActive is checked at login, but must also be checked on every
+    // request so admin deactivation takes effect without waiting for
+    // the 7-day JWT expiry.
+    if (req.user.isActive === false) {
+      return res.status(401).json({ message: 'Account has been deactivated' });
+    }
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Token is invalid or expired' });

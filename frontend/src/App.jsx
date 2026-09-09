@@ -127,7 +127,7 @@ export default function App() {
         <Route path="/director-dashboard"
           element={<ProtectedRoute allowedRoles={['admin','director','tl']}><DirectorDashboard /></ProtectedRoute>} />
         <Route path="/ocr-capture"
-          element={<ProtectedRoute allowedRoles={['admin','director']}><OcrCapture /></ProtectedRoute>} />
+          element={<ProtectedRoute allowedRoles={['admin','director','tl']}><OcrCapture /></ProtectedRoute>} />
 
         {/* Admin only */}
         <Route path="/leads/import"

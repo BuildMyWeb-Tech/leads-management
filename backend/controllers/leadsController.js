@@ -62,19 +62,54 @@ const getLeads = async (req, res) => {
     }
 
     if (sort === 'priority') {
-      // Ranking depends on computed sub-state (site visits, overdue
-      // follow-up), so it's applied in-memory after fetching matching
-      // leads rather than as a DB-level sort. Fine for current data
-      // volumes; a DB-level approach can be revisited later if a
-      // director/admin's full lead list grows large enough to matter.
-      const all = await Lead.find(filter)
-        .populate('assignedDirector',   'name email')
-        .populate('assignedTelecaller', 'name email')
-        .lean();
-      const sorted = sortLeadsByPriority(all);
-      const total  = sorted.length;
+      // G.2 FIX (P1-006): DB-side sort via $addFields + $switch so only
+      // the requested page is transferred from MongoDB, not the full
+      // collection. Ranking order matches priorityRanking.js exactly:
+      //   1 Booked, 2 Hot, 3 Completed site visit, 4 Upcoming site visit,
+      //   5 Warm, 6 Cold.
+      const now = new Date();
       const p = Number(page), l = Number(limit);
-      const leads = sorted.slice((p - 1) * l, (p - 1) * l + l);
+      const total = await Lead.countDocuments(filter);
+      const rawLeads = await Lead.aggregate([
+        { $match: filter },
+        { $addFields: {
+          _priorityRank: { $switch: {
+            branches: [
+              { case: { $eq: ['$status', 'Booked'] }, then: 1 },
+              { case: { $eq: ['$priority', 'Hot'] },  then: 2 },
+              { case: { $or: [
+                { $eq: ['$status', 'Site Visit Done'] },
+                { $gt: [{ $size: { $filter: {
+                  input: { $ifNull: ['$siteVisits', []] },
+                  as: 'sv', cond: { $eq: ['$$sv.status', 'completed'] },
+                }}]}, 0] },
+              ]}, then: 3 },
+              { case: { $or: [
+                { $eq: ['$status', 'Site Visit Planned'] },
+                { $gt: [{ $size: { $filter: {
+                  input: { $ifNull: ['$siteVisits', []] },
+                  as: 'sv', cond: { $eq: ['$$sv.status', 'planned'] },
+                }}]}, 0] },
+              ]}, then: 4 },
+              { case: { $eq: ['$priority', 'Warm'] }, then: 5 },
+            ],
+            default: 6,
+          }},
+          _isOverdue: { $and: [
+            { $eq: ['$status', 'Follow Up'] },
+            { $ne:  ['$followUpDate', null] },
+            { $lt:  ['$followUpDate', now]  },
+          ]},
+        }},
+        { $sort: { _priorityRank: 1, _isOverdue: -1, followUpDate: 1, updatedAt: -1, createdAt: -1 } },
+        { $skip:  (p - 1) * l },
+        { $limit: l },
+        { $unset: ['_priorityRank', '_isOverdue'] },
+      ]);
+      const leads = await Lead.populate(rawLeads, [
+        { path: 'assignedDirector',   select: 'name email' },
+        { path: 'assignedTelecaller', select: 'name email' },
+      ]);
       return res.json({ leads, total, page: p, pages: Math.ceil(total / l) });
     }
 
@@ -446,7 +481,8 @@ const getDashboardStats = async (req, res) => {
     // PHASE C: same shared visibility filter as getLeads — adds
     // correct 'tl' scoping; admin/director/telecaller unchanged.
     const filter = await buildLeadVisibilityFilter(req.user);
-    const [totalLeads, statusStats, sourceStats, recentLeads, directorStats] = await Promise.all([
+    const now = new Date();
+    const [totalLeads, statusStats, sourceStats, recentLeads, directorStats, priorityStats, overdueCount, todayCount] = await Promise.all([
       Lead.countDocuments(filter),
       Lead.aggregate([{ $match: filter }, { $group: { _id: '$status', count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
       Lead.aggregate([{ $match: filter }, { $group: { _id: '$source',  count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
@@ -461,9 +497,31 @@ const getDashboardStats = async (req, res) => {
             { $sort: { count: -1 } }, { $limit: 10 },
           ])
         : Promise.resolve([]),
+      // G.2 P2-004: priority breakdown (Hot/Warm/Cold counts)
+      Lead.aggregate([{ $match: filter }, { $group: { _id: '$priority', count: { $sum: 1 } } }]),
+      // G.2 P2-004: overdue follow-up count
+      Lead.countDocuments({ ...filter, status: 'Follow Up', followUpDate: { $ne: null, $lt: now } }),
+      // G.2 P2-004: today follow-up count
+      Lead.countDocuments({
+        ...filter, status: 'Follow Up',
+        followUpDate: {
+          $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+          $lt:  new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1),
+        },
+      }),
     ]);
     const unassigned = await Lead.countDocuments({ ...filter, assignedDirector: null });
-    res.json({ totalLeads, unassigned, statusStats, sourceStats, directorStats, recentLeads });
+    const priorityBreakdown = Object.fromEntries(priorityStats.map((p) => [p._id, p.count]));
+    res.json({
+      totalLeads, unassigned, statusStats, sourceStats, directorStats, recentLeads,
+      // G.2 additions
+      priorityBreakdown: {
+        hot:  priorityBreakdown['Hot']  || 0,
+        warm: priorityBreakdown['Warm'] || 0,
+        cold: priorityBreakdown['Cold'] || 0,
+      },
+      followUpKpis: { overdueCount, todayCount },
+    });
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
 

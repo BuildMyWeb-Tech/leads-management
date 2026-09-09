@@ -126,7 +126,14 @@ const regenerateDirectorView = async () => {
 
     console.log('[DirectorView] proceeding -- directorViewSheetName =', cfg.directorViewSheetName);
 
-    const leads = await Lead.find({})
+    // G.2 FIX (P1-005): project only the fields needed for the 4-column
+    // Director_View (Director | Customer Name | Mobile Number | Remarks/Notes)
+    // so we load ~200 bytes/lead instead of the full ~2KB document.
+    // This prevents OOM at 50k+ leads during regeneration.
+    const leads = await Lead.find(
+      {},
+      { assignedDirector: 1, name: 1, phone: 1, remarks: 1, notes: 1, createdAt: 1 }
+    )
       .populate('assignedDirector', 'name')
       .sort({ createdAt: 1 })
       .lean();

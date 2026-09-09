@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Lead = require('../models/Lead');
 const User = require('../models/User');
+const { buildOverdueFollowUpQuery } = require('../utils/followUpHelper');
 
 // ── Helper: cast string → ObjectId for aggregate pipelines ───
 const toObjectId = (id) => {
@@ -63,7 +64,9 @@ const getDirectorDashboard = async (req, res) => {
       sourceBreakdown,
       telecallerBreakdown,
       recentLeads,
-      followUps,
+      overdueFollowUps,   // G.2 P1-007
+      todayFollowUps,     // G.2 P1-007
+      upcomingFollowUps,  // G.2 P1-007
       weeklyTrend,
     ] = await Promise.all([
 
@@ -111,9 +114,30 @@ const getDirectorDashboard = async (req, res) => {
         .limit(8)
         .populate('assignedTelecaller', 'name'),
 
-      Lead.find({ ...baseFilter, status: 'Follow Up' })
-        .sort({ updatedAt: 1 })
-        .limit(10)
+      // G.2 FIX (P1-007): split follow-ups into overdue / today / upcoming
+      // using the canonical buildOverdueFollowUpQuery so the definition
+      // matches telecallerController, priorityRanking, and FollowUpBadge.
+      Lead.find(buildOverdueFollowUpQuery(baseFilter, now))
+        .sort({ followUpDate: 1 })
+        .limit(20)
+        .populate('assignedTelecaller', 'name'),
+
+      Lead.find({
+        ...baseFilter,
+        status: 'Follow Up',
+        followUpDate: { $gte: todayStart, $lt: new Date(todayStart.getTime() + 86400000) },
+      })
+        .sort({ followUpDate: 1 })
+        .limit(20)
+        .populate('assignedTelecaller', 'name'),
+
+      Lead.find({
+        ...baseFilter,
+        status: 'Follow Up',
+        followUpDate: { $gte: new Date(todayStart.getTime() + 86400000) },
+      })
+        .sort({ followUpDate: 1 })
+        .limit(20)
         .populate('assignedTelecaller', 'name'),
 
       Lead.aggregate([
@@ -176,7 +200,11 @@ const getDirectorDashboard = async (req, res) => {
       sourceBreakdown,
       telecallerBreakdown: enrichedTelecallers,
       recentLeads,
-      followUps,
+      // G.2 P1-007: date-segmented follow-ups replace the old mixed list
+      followUps: overdueFollowUps,   // kept for backward compatibility (UI "Follow Ups" tab)
+      overdueFollowUps,
+      todayFollowUps,
+      upcomingFollowUps,
       weeklyTrend,
     });
   } catch (err) {

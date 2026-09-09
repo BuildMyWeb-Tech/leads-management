@@ -21,6 +21,7 @@ const getTelecallerDashboard = async (req, res) => {
       totalLeads,
       statusBreakdown,
       todayFollowUps,
+      overdueCount,      // G.2 P1-004: accurate count (not capped by display limit)
       overdueFollowUps,
       recentActivity,
       weekLeads,
@@ -40,10 +41,11 @@ const getTelecallerDashboard = async (req, res) => {
         followUpDate: { $gte: todayStart, $lt: todayEnd },
       }).sort({ followUpDate: 1 }).limit(20),
 
-      // PHASE E FIX: was treating followUpDate:null as overdue,
-      // disagreeing with the canonical isFollowUpOverdue() definition
-      // used everywhere else (FollowUpBadge, priorityRanking). Now
-      // built from the same single source of truth.
+      // G.2 FIX (P1-004): accurate overdue count — separate from the
+      // display list so >10 overdue leads are not undercounted.
+      Lead.countDocuments(buildOverdueFollowUpQuery(base, now)),
+
+      // Display list limited to 10 for the panel UI
       Lead.find(buildOverdueFollowUpQuery(base, now))
         .sort({ updatedAt: 1 }).limit(10),
 
@@ -69,7 +71,7 @@ const getTelecallerDashboard = async (req, res) => {
       kpis: {
         totalLeads, called, followUp, interested,
         booked, notInterested, siteVisit, weekLeads, conversionRate,
-        overdueCount: overdueFollowUps.length,
+        overdueCount, // accurate count from countDocuments (G.2 P1-004)
         todayCount:   todayFollowUps.length,
       },
       statusBreakdown,

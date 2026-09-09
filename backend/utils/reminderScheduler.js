@@ -1,21 +1,31 @@
 /**
- * reminderScheduler.js — Daily follow-up reminder cron.
+ * reminderScheduler.js — Daily follow-up reminder scheduler.
  *
  * Runs every day at 9:00 AM IST (3:30 AM UTC).
  * Finds all leads with followUpDate = today and status = 'Follow Up'.
  * Sends push notification to the assigned telecaller (and director).
  *
- * Uses setInterval polling — no external cron dependency needed.
- * For production, replace with node-cron or a cloud scheduler.
+ * G.2 FIX (P2-002): crash-safe via AppState.lastReminderDate.
+ * On startup the scheduler checks whether today's reminders have
+ * already fired (persisted to DB). If the server crashed between
+ * midnight and 9 AM IST and restarts after 9 AM IST, the missed
+ * reminders are dispatched immediately without waiting 24 hours.
  */
 
-const { notify } = require('./pushService');
+const { notify }  = require('./pushService');
 const Lead        = require('../models/Lead');
-const User        = require('../models/User');
+const AppState    = require('../models/AppState');
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // UTC+5:30
 
-// Get today's date range in IST
+// Return today's date string 'YYYY-MM-DD' in IST
+const getTodayISTString = () => {
+  const now    = new Date();
+  const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+  return istNow.toISOString().slice(0, 10);
+};
+
+// Get today's follow-up date range in IST (midnight-to-midnight)
 const getTodayRange = () => {
   const now     = new Date();
   const istNow  = new Date(now.getTime() + IST_OFFSET_MS);
@@ -31,7 +41,7 @@ const getTodayRange = () => {
 };
 
 // Compute ms until next 9:00 AM IST
-const msUntilNextRun = () => {
+const msUntilNext9amIST = () => {
   const now    = new Date();
   const istNow = new Date(now.getTime() + IST_OFFSET_MS);
 
@@ -44,9 +54,27 @@ const msUntilNextRun = () => {
   return next9am.getTime() - now.getTime();
 };
 
-// Main reminder dispatch
+// Whether current IST time is 9:00 AM or later.
+// After adding IST_OFFSET_MS the getUTCHours() value equals the IST hour
+// directly (e.g. now=03:30 UTC → istNow=09:00 → getUTCHours()=9).
+const isPast9amIST = (now = new Date()) => {
+  const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+  return istNow.getUTCHours() >= 9;
+};
+
+// Main reminder dispatch — persists the fired date so crash recovery
+// knows not to fire again for the same calendar day.
 const sendFollowUpReminders = async () => {
   try {
+    const todayStr = getTodayISTString();
+    const state    = await AppState.getOrCreate();
+
+    // Idempotency guard: don't double-fire on the same IST day
+    if (state.lastReminderDate === todayStr) {
+      console.log(`[Reminder] Already sent reminders for ${todayStr} — skipping`);
+      return;
+    }
+
     console.log('[Reminder] Running follow-up reminders at', new Date().toISOString());
     const { start, end } = getTodayRange();
 
@@ -62,6 +90,12 @@ const sendFollowUpReminders = async () => {
       .populate('assignedDirector',   'name notificationPrefs')
       .lean();
 
+    // Persist the fired date BEFORE sending to avoid duplicate sends
+    // on a crash-during-send scenario; partial sends are preferred over
+    // duplicate sends.
+    state.lastReminderDate = todayStr;
+    await state.save();
+
     if (!leads.length) {
       console.log('[Reminder] No follow-ups due today');
       return;
@@ -69,7 +103,6 @@ const sendFollowUpReminders = async () => {
 
     let sent = 0;
     for (const lead of leads) {
-      // Notify telecaller
       if (
         lead.assignedTelecaller &&
         lead.assignedTelecaller.notificationPrefs?.followUpReminder !== false
@@ -82,7 +115,6 @@ const sendFollowUpReminders = async () => {
         sent++;
       }
 
-      // Notify director if they also want follow-up reminders
       if (
         lead.assignedDirector &&
         lead.assignedDirector.notificationPrefs?.followUpReminder &&
@@ -103,16 +135,46 @@ const sendFollowUpReminders = async () => {
   }
 };
 
-// Schedule to run daily at 9 AM IST
-const startReminderScheduler = () => {
-  const delay = msUntilNextRun();
-  console.log(`[Reminder] Next run in ${Math.round(delay / 1000 / 60)} minutes`);
+// G.2 crash-safe startup:
+//   1. Check DB for lastReminderDate
+//   2. If today's reminders haven't fired AND it's already past 9 AM IST:
+//      fire immediately, then schedule next run for tomorrow 9 AM IST
+//   3. Otherwise: schedule for today (or tomorrow) at 9 AM IST
+const startReminderScheduler = async () => {
+  try {
+    const state    = await AppState.getOrCreate();
+    const todayStr = getTodayISTString();
+    const alreadyRan = state.lastReminderDate === todayStr;
+    const now        = new Date();
 
-  setTimeout(() => {
-    sendFollowUpReminders();
-    // Then run every 24 hours
-    setInterval(sendFollowUpReminders, 24 * 60 * 60 * 1000);
-  }, delay);
+    if (!alreadyRan && isPast9amIST(now)) {
+      // Server restarted after 9 AM IST without having sent today's reminders
+      console.log('[Reminder] Missed 9 AM run detected — dispatching reminders now');
+      await sendFollowUpReminders();
+      // Schedule for tomorrow
+      const delay = msUntilNext9amIST();
+      console.log(`[Reminder] Next run in ${Math.round(delay / 60000)} minutes`);
+      setTimeout(() => {
+        sendFollowUpReminders();
+        setInterval(sendFollowUpReminders, 24 * 60 * 60 * 1000);
+      }, delay);
+    } else {
+      const delay = msUntilNext9amIST();
+      console.log(`[Reminder] Next run in ${Math.round(delay / 60000)} minutes`);
+      setTimeout(() => {
+        sendFollowUpReminders();
+        setInterval(sendFollowUpReminders, 24 * 60 * 60 * 1000);
+      }, delay);
+    }
+  } catch (err) {
+    // Non-fatal — fall back to the original timer-only approach
+    console.error('[Reminder] Startup check failed, falling back to timer:', err.message);
+    const delay = msUntilNext9amIST();
+    setTimeout(() => {
+      sendFollowUpReminders();
+      setInterval(sendFollowUpReminders, 24 * 60 * 60 * 1000);
+    }, delay);
+  }
 };
 
 // Also export for manual trigger from API
