@@ -1,6 +1,7 @@
 const Lead = require('../models/Lead');
 const audit = require('../utils/auditService');                             // PHASE C
-const { recordCallHistoryEntry, appendSiteVisit } = require('../utils/leadUpdateHelpers'); // PHASE C
+const { recordCallHistoryEntry, appendSiteVisit, snapshotTrackedFields } = require('../utils/leadUpdateHelpers'); // PHASE C/E
+const { buildOverdueFollowUpQuery } = require('../utils/followUpHelper');    // PHASE E
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/telecaller/dashboard
@@ -39,15 +40,12 @@ const getTelecallerDashboard = async (req, res) => {
         followUpDate: { $gte: todayStart, $lt: todayEnd },
       }).sort({ followUpDate: 1 }).limit(20),
 
-      // Follow-ups overdue (followUpDate in past OR null with status Follow Up)
-      Lead.find({
-        ...base,
-        status: 'Follow Up',
-        $or: [
-          { followUpDate: { $lt: todayStart } },
-          { followUpDate: null },
-        ],
-      }).sort({ updatedAt: 1 }).limit(10),
+      // PHASE E FIX: was treating followUpDate:null as overdue,
+      // disagreeing with the canonical isFollowUpOverdue() definition
+      // used everywhere else (FollowUpBadge, priorityRanking). Now
+      // built from the same single source of truth.
+      Lead.find(buildOverdueFollowUpQuery(base, now))
+        .sort({ updatedAt: 1 }).limit(10),
 
       // Recently updated leads (my activity)
       Lead.find(base)
@@ -106,6 +104,9 @@ const updateMyLead = async (req, res) => {
     const prevStatus   = lead.status;
     const prevPriority = lead.priority;
     let addedSiteVisit = null;
+    // PHASE E: snapshot BEFORE mutation for the generic audit event's
+    // before/after pair.
+    const beforeSnapshot = snapshotTrackedFields(lead, req.body);
 
     if (status !== undefined) {
       if (!ALLOWED.includes(status)) {
@@ -143,7 +144,9 @@ const updateMyLead = async (req, res) => {
     if (updated.status !== prevStatus) {
       audit.leadStatusChanged(req, updated, prevStatus, updated.status);
     } else if (notes !== undefined || remarks !== undefined || followUpDate !== undefined) {
-      audit.leadUpdated(req, updated, { notes, remarks, followUpDate });
+      // PHASE E: real before/after values, not just "after".
+      const afterSnapshot = snapshotTrackedFields(updated, req.body);
+      audit.leadUpdated(req, updated, beforeSnapshot, afterSnapshot);
     }
     if (updated.priority !== prevPriority) {
       audit.leadPriorityChanged(req, updated, prevPriority, updated.priority);

@@ -9,7 +9,9 @@ const audit        = require('../utils/auditService');   // PHASE 10
 const { generateLeadId } = require('../utils/leadIdGenerator');           // PHASE C
 const { buildLeadVisibilityFilter } = require('../utils/leadVisibility'); // PHASE C
 const { sortLeadsByPriority } = require('../utils/priorityRanking');      // PHASE C
-const { recordCallHistoryEntry, appendSiteVisit } = require('../utils/leadUpdateHelpers'); // PHASE C
+const { recordCallHistoryEntry, appendSiteVisit, snapshotTrackedFields } = require('../utils/leadUpdateHelpers'); // PHASE C/E
+const { applyLeadBusinessRulesToPlainData } = require('../utils/leadBusinessRules'); // PHASE E
+const { escapeRegex } = require('../utils/searchUtils'); // PHASE E
 
 const LEAD_STATUSES = [
   'New','Allocated','Called','Follow Up',
@@ -41,10 +43,14 @@ const getLeads = async (req, res) => {
     if (assignedDirector  && req.user.role === 'admin') filter.assignedDirector  = assignedDirector;
     if (assignedTelecaller && req.user.role !== 'telecaller') filter.assignedTelecaller = assignedTelecaller;
     if (search) {
+      // PHASE E: escape regex metacharacters so search text is always
+      // matched literally (see utils/searchUtils.js) — behaviour for
+      // ordinary text is unchanged.
+      const safeSearch = escapeRegex(search);
       filter.$or = [
-        { name:  { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
+        { name:  { $regex: safeSearch, $options: 'i' } },
+        { phone: { $regex: safeSearch, $options: 'i' } },
+        { email: { $regex: safeSearch, $options: 'i' } },
       ];
     }
 
@@ -168,6 +174,9 @@ const updateLead = async (req, res) => {
     const prevPriority   = lead.priority;
     const prevTelecaller = lead.assignedTelecaller?.toString();
     let addedSiteVisit   = null;
+    // PHASE E: snapshot BEFORE any field is mutated, for the generic
+    // audit event's before/after pair (see auditService.leadUpdated).
+    const beforeSnapshot  = snapshotTrackedFields(lead, req.body);
 
     // PHASE D SIGN-OFF: admin, director, and tl are ONE equivalent
     // permission tier for lead management (explicit product decision
@@ -226,16 +235,9 @@ const updateLead = async (req, res) => {
         notify.statusChanged(updated.assignedDirector._id, updated.name, prevStatus, updated.status);
       }
     } else {
-      audit.leadUpdated(req, updated, {
-        notes: req.body.notes,
-        remarks: req.body.remarks,
-        followUpDate: req.body.followUpDate,
-        propertyType: req.body.propertyType,
-        plotSquareFeet: req.body.plotSquareFeet,
-        targetLocation: req.body.targetLocation,
-        purpose: req.body.purpose,
-        lastCallDetails: req.body.lastCallDetails,
-      });
+      // PHASE E: real before/after values, not just "after".
+      const afterSnapshot = snapshotTrackedFields(updated, req.body);
+      audit.leadUpdated(req, updated, beforeSnapshot, afterSnapshot);
     }
 
     if (updated.priority !== prevPriority) {
@@ -389,6 +391,12 @@ const importCSV = async (req, res) => {
       } catch (e) {
         console.error('[CSV Import] leadId generation failed for a row:', e.message);
       }
+      // PHASE E: insertMany() below bypasses Lead.js's pre('save')
+      // hook, so priority escalation / plot-field cleanup — normally
+      // applied there — must be applied explicitly here, using the
+      // exact same rule logic (no second implementation). Matters in
+      // practice for CSV rows whose Status column is 'Booked' etc.
+      applyLeadBusinessRulesToPlainData(raw);
       leadsToInsert.push(raw);
     }
     if (!leadsToInsert.length) return res.status(400).json({ message: 'No valid rows found' });

@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { LEAD_STATUSES, STATUS_BAR_COLORS, STATUS_BADGE_CLASSES } from '../constants/leadConstants';
 import KpiCard from '../components/director/KpiCard';
 import PwaStatusCard from '../components/pwa/PwaStatusCard';
+import toast from 'react-hot-toast';
 
 function StatCard({ label, value, color = 'text-gray-900', sub, icon }) {
   return (
@@ -35,24 +36,35 @@ export default function Dashboard() {
   const [stats, setStats]           = useState(null);
   const [allocStats, setAllocStats] = useState(null);
   const [loading, setLoading]       = useState(true);
+  // PHASE E: explicit error state — a failed stats fetch must never
+  // silently render as an all-zero dashboard (previous behavior: no
+  // catch at all on the primary fetch).
+  const [error, setError]           = useState(null);
 
-  useEffect(() => {
-    const fetchAll = async () => {
-      try {
-        const statsRes = await api.get('/leads/dashboard/stats');
-        setStats(statsRes.data);
-        if (user?.role === 'admin') {
-          try {
-            const aRes = await api.get('/allocation/stats');
-            setAllocStats(aRes.data);
-          } catch (_) {}
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const statsRes = await api.get('/leads/dashboard/stats');
+      setStats(statsRes.data);
+      if (user?.role === 'admin') {
+        try {
+          const aRes = await api.get('/allocation/stats');
+          setAllocStats(aRes.data);
+        } catch (_) {
+          // Allocation stats are a secondary, admin-only widget —
+          // its own failure shouldn't block the primary dashboard.
         }
-      } finally {
-        setLoading(false);
       }
-    };
-    fetchAll();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Unable to load dashboard data.');
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   if (loading) {
     return (
@@ -61,6 +73,22 @@ export default function Dashboard() {
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
         </svg>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-center px-4">
+        <svg className="w-10 h-10 text-red-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <p className="text-sm font-medium text-gray-700">Unable to load dashboard data.</p>
+        <p className="text-xs text-gray-400 mt-1 mb-4">{error}</p>
+        <button onClick={fetchAll} className="btn-secondary text-sm">
+          Try again
+        </button>
       </div>
     );
   }

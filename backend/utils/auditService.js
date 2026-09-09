@@ -74,10 +74,16 @@ const leadStatusChanged = (req, lead, oldStatus, newStatus) =>
     `Status changed: "${lead.name}" → ${oldStatus} → ${newStatus}`
   );
 
-const leadUpdated = (req, lead, changedFields) =>
+// PHASE E FIX: previously took a single `changedFields` object and
+// always logged `before: null` — impossible to tell what a field's
+// prior value was. Now takes explicit before/after snapshots (see
+// utils/leadUpdateHelpers.js's snapshotTrackedFields, called once
+// before mutation and once after save at each call site) so the audit
+// trail actually shows what changed, not just what it changed to.
+const leadUpdated = (req, lead, before, after) =>
   log(req, 'lead_updated',
     { type: 'lead', _id: lead._id, name: lead.name, phone: lead.phone },
-    { before: null, after: changedFields },
+    { before, after },
     `Lead "${lead.name}" updated`
   );
 

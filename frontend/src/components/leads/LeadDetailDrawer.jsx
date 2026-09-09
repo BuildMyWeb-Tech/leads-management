@@ -69,8 +69,30 @@ export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
     setEditingProfile(true);
   };
 
+  // PHASE E: AddLead treats propertyType/targetLocation/budget/purpose
+  // as required — this edit form previously had no validation at all,
+  // letting an edit silently blank out fields AddLead enforces as
+  // mandatory. Mirrors AddLead's own validation exactly.
+  const validateProfileForm = (form) => {
+    if (!form.propertyType) return 'Property Type is required';
+    if (!['Plot', 'House'].includes(form.propertyType)) return 'Invalid Property Type';
+    if (form.propertyType === 'Plot' && form.plotSquareFeet && !PLOT_SQFT_OPTIONS.includes(form.plotSquareFeet)) {
+      return 'Invalid Plot Sq. Ft. value';
+    }
+    if (!form.targetLocation.trim()) return 'Target Location is required';
+    if (!form.budget.trim()) return 'Budget is required';
+    if (!form.purpose) return 'Purpose is required';
+    if (!PURPOSE_OPTIONS.includes(form.purpose)) return 'Invalid Purpose';
+    return null;
+  };
+
   const saveProfile = async (e) => {
     e.preventDefault();
+    const validationError = validateProfileForm(profileForm);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
     setSavingProfile(true);
     try {
       const payload = { ...profileForm };
@@ -187,8 +209,8 @@ export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
               <form onSubmit={saveProfile} className="space-y-3 bg-gray-50 rounded-lg p-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="label text-xs">Property Type</label>
-                    <select className="input-sm" value={profileForm.propertyType}
+                    <label className="label text-xs">Property Type <span className="text-red-400">*</span></label>
+                    <select className="input-sm" value={profileForm.propertyType} required
                       onChange={(e) => setProfileForm({ ...profileForm, propertyType: e.target.value })}>
                       <option value="">— Select —</option>
                       {PROPERTY_TYPES.map((p) => <option key={p}>{p}</option>)}
@@ -205,18 +227,18 @@ export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
                     </div>
                   )}
                   <div>
-                    <label className="label text-xs">Target Location</label>
-                    <input className="input-sm" value={profileForm.targetLocation}
+                    <label className="label text-xs">Target Location <span className="text-red-400">*</span></label>
+                    <input className="input-sm" value={profileForm.targetLocation} required
                       onChange={(e) => setProfileForm({ ...profileForm, targetLocation: e.target.value })} />
                   </div>
                   <div>
-                    <label className="label text-xs">Budget</label>
-                    <input className="input-sm" value={profileForm.budget}
+                    <label className="label text-xs">Budget <span className="text-red-400">*</span></label>
+                    <input className="input-sm" value={profileForm.budget} required
                       onChange={(e) => setProfileForm({ ...profileForm, budget: e.target.value })} />
                   </div>
                   <div>
-                    <label className="label text-xs">Purpose</label>
-                    <select className="input-sm" value={profileForm.purpose}
+                    <label className="label text-xs">Purpose <span className="text-red-400">*</span></label>
+                    <select className="input-sm" value={profileForm.purpose} required
                       onChange={(e) => setProfileForm({ ...profileForm, purpose: e.target.value })}>
                       <option value="">— Select —</option>
                       {PURPOSE_OPTIONS.map((p) => <option key={p}>{p}</option>)}

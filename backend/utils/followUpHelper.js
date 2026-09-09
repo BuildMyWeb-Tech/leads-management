@@ -27,4 +27,25 @@ const isFollowUpUpcoming = (lead, now = new Date()) => {
   return new Date(lead.followUpDate).getTime() >= now.getTime();
 };
 
-module.exports = { isFollowUpOverdue, isFollowUpUpcoming };
+// PHASE E FIX: telecallerController's dashboard "overdue" query used
+// to treat `followUpDate: null` (with status 'Follow Up') as overdue,
+// while isFollowUpOverdue() above explicitly does not — a lead could
+// show as overdue on the telecaller dashboard but nowhere else
+// (priority ranking, FollowUpBadge). Rather than fix the query inline
+// and risk the two definitions drifting apart again later, this
+// builds the exact MongoDB filter shape that matches
+// isFollowUpOverdue()'s semantics, so there is ONE source of truth:
+// status must be 'Follow Up', followUpDate must be non-null, and it
+// must be strictly before `now`.
+//
+// Note `$ne: null` is required (not just `$lt: now`): MongoDB's
+// cross-type comparison ordering places `null` before any Date value,
+// so `{ followUpDate: { $lt: now } }` alone would incorrectly match
+// documents where followUpDate is null.
+const buildOverdueFollowUpQuery = (base = {}, now = new Date()) => ({
+  ...base,
+  status: 'Follow Up',
+  followUpDate: { $ne: null, $lt: now },
+});
+
+module.exports = { isFollowUpOverdue, isFollowUpUpcoming, buildOverdueFollowUpQuery };

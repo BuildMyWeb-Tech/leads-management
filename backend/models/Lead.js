@@ -166,5 +166,9 @@ leadSchema.index({ status: 1 });
 leadSchema.index({ followUpDate: 1 });
 leadSchema.index({ priority: 1 });
 leadSchema.index({ captureDate: 1 });
+// PHASE E: supports the status+followUpDate overdue/upcoming queries
+// (telecallerController's dashboard, buildOverdueFollowUpQuery) that
+// previously could only use one of the two single-field indexes.
+leadSchema.index({ status: 1, followUpDate: 1 });
 
 module.exports = mongoose.model('Lead', leadSchema);

@@ -5,6 +5,8 @@ const syncToSheets = require('../utils/syncToSheets');
 const { regenerateDirectorView } = require('../utils/syncToSheets');
 const audit = require('../utils/auditService');   // FIXED: was missing, caused ERR_HTTP_HEADERS_SENT
 const { generateLeadId } = require('../utils/leadIdGenerator');   // PHASE C
+const { findExistingLeadsByPhones } = require('../utils/leadDuplicateCheck'); // PHASE E
+const { applyLeadBusinessRulesToPlainData } = require('../utils/leadBusinessRules'); // PHASE E
 
 // ── Phase 11C — name validation (mirrors frontend ocrEngine.js) ─
 // Defensive re-check on the server: a client could call /ocr/import
@@ -63,12 +65,10 @@ const checkDuplicates = async (req, res) => {
     // works for any country (not India-only like the old +91 strip).
     const normalised = phones.map(normaliseForDedupe);
 
-    // Match stored numbers whose digit-only form ends with or equals
-    // the dedupe key. We can't use a suffix regex anymore since
-    // international numbers may be stored with a + prefix, so we
-    // fetch candidates and match in JS.
-    const existing = await Lead.find({}).select('name phone status assignedDirector')
-      .populate('assignedDirector', 'name').lean();
+    // PHASE E FIX: bounded query — only fetches leads whose phone
+    // could match one of the given candidates, never the whole
+    // collection (see utils/leadDuplicateCheck.js).
+    const existing = await findExistingLeadsByPhones(Lead, phones);
 
     const dupMap = {};
     existing.forEach((lead) => {
@@ -126,8 +126,10 @@ const importOcrLeads = async (req, res) => {
       }
     }
 
-    // Fetch all stored phones and build a dedupe set (digits-only keys)
-    const existingLeads = await Lead.find({}).select('phone').lean();
+    // PHASE E FIX: bounded query — only fetches leads whose phone
+    // could match one of THIS batch's cleaned phone numbers, never
+    // the whole collection.
+    const existingLeads = await findExistingLeadsByPhones(Lead, unique.map((l) => l._clean));
     const existingSet   = new Set(existingLeads.map((l) => normaliseForDedupe(l.phone)));
 
     const toInsert = [];
@@ -164,6 +166,11 @@ const importOcrLeads = async (req, res) => {
       } catch (e) {
         console.error('[OCR Import] leadId generation failed for a row:', e.message);
       }
+      // PHASE E: insertMany() below bypasses Lead.js's pre('save')
+      // hook, so priority escalation / plot-field cleanup — normally
+      // applied there — must be applied explicitly here, using the
+      // exact same rule logic (no second implementation).
+      applyLeadBusinessRulesToPlainData(leadData);
       toInsert.push(leadData);
     }
 

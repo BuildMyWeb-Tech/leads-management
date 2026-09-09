@@ -355,7 +355,11 @@ const bulkSync = async (config, leads) => {
 };
 
 // ── NEW — Regenerate Director_View: grouped-by-director report ──
-// Fixed 5 columns: Director | Customer Name | Mobile Number | Status | Remarks / Notes
+// PHASE E: fixed stale comment — this is 4 columns, not 5. Status was
+// removed by design (see the correct comment at the top of this file,
+// lines 15-21); DIRECTOR_VIEW_HEADERS/buildDirectorViewRow below are
+// the actual source of truth.
+// Fixed 4 columns: Director | Customer Name | Mobile Number | Remarks / Notes
 //
 // Grouping: leads are bucketed by assignedDirector, each bucket
 // preserving the leads' relative chronological order (the order

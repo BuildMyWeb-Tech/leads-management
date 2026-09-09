@@ -6,13 +6,13 @@
  * update, director update, admin update) gets the same behaviour
  * automatically, without duplicating rules across controllers.
  *
- * KNOWN LIMITATION (documented, not fixed in Phase C): Mongoose
- * `insertMany()` (used by CSV import and OCR bulk import) does NOT
- * run `pre('save')` hooks, so these rules do not apply to bulk-
- * imported rows. Bulk imports always start at status 'New'/'Allocated'
- * and priority 'Cold' (schema default), so this is low-risk — no
- * bulk-imported lead is created already Hot-eligible. Flagged here
- * for anyone extending bulk import later.
+ * PHASE C→E NOTE: Mongoose `insertMany()` (used by CSV import and OCR
+ * bulk import) does NOT run `pre('save')` hooks, so the document-based
+ * `applyLeadBusinessRules` above never ran for bulk-imported rows —
+ * flagged as a known limitation in Phase C, and closed in Phase E via
+ * `applyLeadBusinessRulesToPlainData` below, called explicitly by both
+ * `leadsController.importCSV` and `ocrController.importOcrLeads`
+ * before `insertMany()`.
  */
 
 // Pipeline statuses that represent high-intent progress. Reaching any
@@ -58,8 +58,44 @@ const applyLeadBusinessRules = (lead) => {
   applyPriorityEscalation(lead);
 };
 
+// ── PHASE E — plain-object variant for bulk-insert paths ────────
+// CSV import (leadsController.importCSV) and OCR import
+// (ocrController.importOcrLeads) both use Lead.insertMany(), which
+// does NOT run the pre('save') hook above (that's a Mongoose
+// limitation, not a bug) — so those paths previously skipped these
+// rules entirely (the gap documented above and now closed).
+//
+// This variant operates on a plain data object rather than a
+// Mongoose document, so it can run BEFORE insertMany() is called.
+// Semantics are identical to the document-based rules for a
+// brand-new record: since nothing has been persisted yet, every
+// field present on `data` is by definition "being newly set", so the
+// same trigger conditions (status / siteVisits) apply directly — no
+// isModified() check is needed or meaningful for a not-yet-created
+// document. Reuses the exact same HOT_TRIGGER_STATUSES constant as
+// the document-based rule — one source of truth for the trigger list.
+const applyLeadBusinessRulesToPlainData = (data) => {
+  if (data.propertyType !== 'Plot' && data.plotSquareFeet) {
+    data.plotSquareFeet = null;
+  }
+
+  if (data.priority !== 'Hot') {
+    const statusTriggered = HOT_TRIGGER_STATUSES.includes(data.status);
+    const siteVisitTriggered =
+      Array.isArray(data.siteVisits) &&
+      data.siteVisits.some((v) => v.status === 'planned' || v.status === 'completed');
+
+    if (statusTriggered || siteVisitTriggered) {
+      data.priority = 'Hot';
+    }
+  }
+
+  return data;
+};
+
 module.exports = {
   applyLeadBusinessRules,
+  applyLeadBusinessRulesToPlainData,
   applyPriorityEscalation,
   clearPlotSquareFeetIfNotPlot,
   HOT_TRIGGER_STATUSES,
