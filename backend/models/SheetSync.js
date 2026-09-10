@@ -16,11 +16,13 @@ const mongoose = require('mongoose');
  *     existing tab — see sheetsController migration note).
  *
  *   directorViewSheetName (NEW):
- *     The REPORTING sheet — grouped by director, fixed 5-column
- *     format (Director, Customer Name, Mobile Number, Status,
- *     Remarks / Notes). Regenerated (not appended) on the trigger
- *     events described in syncToSheets.js / allocationController.js
- *     / leadsController.js / ocrController.js.
+ *     The REPORTING sheet — grouped by director, fixed 4-column
+ *     format: Director | Customer Name | Mobile Number | Remarks/Notes.
+ *     (Status column was removed — regenerated infrequently so its
+ *     Status went stale; MongoDB remains the source of truth for status.)
+ *     Regenerated (not appended) on the trigger events described in
+ *     syncToSheets.js / allocationController.js / leadsController.js
+ *     / ocrController.js.
  */
 const sheetSyncSchema = new mongoose.Schema(
   {
@@ -42,7 +44,7 @@ const sheetSyncSchema = new mongoose.Schema(
     syncOnUpdate:   { type: Boolean, default: true  },
 
     // Column mapping for the OPERATIONAL sheet only — Director_View
-    // always uses its fixed 5-column format regardless of this value.
+    // always uses its fixed 4-column format regardless of this value.
     // Default order: Name | Phone | Director | Telecaller | Status | Source | Budget | Notes | Created Date
     columnOrder: {
       type: [String],

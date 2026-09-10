@@ -25,17 +25,21 @@ const getTodayISTString = () => {
   return istNow.toISOString().slice(0, 10);
 };
 
-// Get today's follow-up date range in IST (midnight-to-midnight)
-const getTodayRange = () => {
-  const now     = new Date();
+// Get today's follow-up date range in IST (midnight-to-midnight).
+// Accepts an optional `now` for deterministic testing.
+// J2-001 FIX: end was previously computed as setUTCHours(23,59,59,999)
+// on startUTC which is 18:30 UTC — that lands at ~05:29 IST, covering
+// only the first 5.5 hours of the IST day. The correct end is exactly
+// 24 hours after IST midnight (minus 1ms to stay within the same day).
+const getTodayRange = (now = new Date()) => {
   const istNow  = new Date(now.getTime() + IST_OFFSET_MS);
 
   const start = new Date(istNow);
   start.setUTCHours(0, 0, 0, 0);
   const startUTC = new Date(start.getTime() - IST_OFFSET_MS);
 
-  const end = new Date(startUTC);
-  end.setUTCHours(23, 59, 59, 999);
+  // End = 23:59:59.999 IST = startUTC + 24h - 1ms
+  const end = new Date(startUTC.getTime() + 24 * 60 * 60 * 1000 - 1);
 
   return { start: startUTC, end };
 };
@@ -177,5 +181,5 @@ const startReminderScheduler = async () => {
   }
 };
 
-// Also export for manual trigger from API
-module.exports = { startReminderScheduler, sendFollowUpReminders };
+// Also export for manual trigger from API and for deterministic testing
+module.exports = { startReminderScheduler, sendFollowUpReminders, getTodayRange };

@@ -221,7 +221,14 @@ const exportLogs = async (req, res) => {
     if (dateFrom || dateTo) {
       filter.createdAt = {};
       if (dateFrom) filter.createdAt.$gte = new Date(dateFrom);
-      if (dateTo)   filter.createdAt.$lte = new Date(dateTo);
+      if (dateTo) {
+        // J2-005 FIX: match getLogs semantics — treat dateTo as end-of-day
+        // so exports include the entire requested calendar day, not just
+        // midnight at the start of that day.
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        filter.createdAt.$lte = end;
+      }
     }
 
     const logs = await AuditLog.find(filter)

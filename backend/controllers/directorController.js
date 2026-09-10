@@ -54,7 +54,15 @@ const getDirectorDashboard = async (req, res) => {
     // I2-001: use IST calendar day so boundaries are correct on UTC servers
     const { start: todayStart, end: todayEnd } = getISTDayBounds(now);
     const weekStart  = new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000);
-    const monthStart = getISTMidnightUTC(new Date(now.getFullYear(), now.getMonth(), 1));
+    // J2-004 FIX: derive the IST year/month from istNow (not from server-
+    // local now) so the month boundary is correct when UTC date and IST
+    // date fall in different calendar months (e.g. Aug 31 20:30 UTC =
+    // Sep 1 02:00 IST — month should be September, not August).
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const istNow     = new Date(now.getTime() + IST_OFFSET_MS);
+    const monthStart = getISTMidnightUTC(
+      new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), 1))
+    );
 
     const [
       totalLeads,
@@ -145,7 +153,9 @@ const getDirectorDashboard = async (req, res) => {
         { $match: { ...baseFilterAgg, createdAt: { $gte: weekStart } } },
         {
           $group: {
-            _id:   { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+            // J2-004 FIX: group by IST calendar date, not UTC date, so leads
+            // created between 00:00–05:30 IST appear in the correct IST day.
+            _id:   { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: '+05:30' } },
             count: { $sum: 1 },
           },
         },

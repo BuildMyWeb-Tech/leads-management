@@ -170,5 +170,8 @@ leadSchema.index({ captureDate: 1 });
 // (telecallerController's dashboard, buildOverdueFollowUpQuery) that
 // previously could only use one of the two single-field indexes.
 leadSchema.index({ status: 1, followUpDate: 1 });
+// J2-006: dashboard today/week/month count queries filter by createdAt;
+// without an explicit index these become collection scans at scale.
+leadSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('Lead', leadSchema);

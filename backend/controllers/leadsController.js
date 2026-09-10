@@ -140,7 +140,29 @@ const getLeads = async (req, res) => {
 // for Director_View since telecallers update many leads per day.
 const createLead = async (req, res) => {
   try {
-    const leadData = { ...req.body };
+    // J2-002 FIX: explicit allowlist prevents clients from controlling
+    // server-owned fields (leadId, captureDate, priority, status,
+    // callHistory, siteVisits). Only fields that the Add Lead UI
+    // legitimately supplies are included here.
+    const {
+      name, phone, email, source,
+      propertyType, propertyInterest, plotSquareFeet,
+      targetLocation, purpose, budget,
+      remarks, notes, followUpDate,
+      assignedDirector, assignedTelecaller,
+    } = req.body;
+    const leadData = {
+      name, phone, email, source,
+      propertyType, propertyInterest, plotSquareFeet,
+      targetLocation, purpose, budget,
+      remarks, notes, followUpDate,
+      assignedDirector, assignedTelecaller,
+    };
+    // Remove undefined keys so schema defaults apply correctly
+    Object.keys(leadData).forEach((k) => {
+      if (leadData[k] === undefined) delete leadData[k];
+    });
+
     if (!leadData.assignedDirector) {
       try {
         const pick = await pickNextDirector();
@@ -210,7 +232,22 @@ const getLead = async (req, res) => {
 // per client confirmation that this is acceptable.
 const updateLead = async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    // J2-003 FIX: apply visibility scoping for director and TL so they
+    // can only update leads within their own portfolio. Admin retains
+    // unrestricted access. Telecaller ownership is unchanged (handled
+    // below). Returns 404 for out-of-scope leads so callers cannot
+    // enumerate lead IDs through error-code differences.
+    let lead;
+    if (req.user.role === 'admin') {
+      lead = await Lead.findById(req.params.id);
+    } else if (req.user.role === 'director' || req.user.role === 'tl') {
+      const visFilter = await buildLeadVisibilityFilter(req.user);
+      lead = await Lead.findOne({ _id: req.params.id, ...visFilter });
+    } else {
+      // telecaller and any other role — full-collection load; ownership
+      // check applied below in the telecaller branch
+      lead = await Lead.findById(req.params.id);
+    }
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
 
     const prevStatus     = lead.status;

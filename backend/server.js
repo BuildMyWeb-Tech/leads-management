@@ -86,7 +86,7 @@ app.use('/api/push',       require('./routes/push'));
 app.use('/api/audit',      require('./routes/audit'));
 
 app.get('/api/health', (_req, res) =>
-  res.json({ status: 'OK', message: 'Lead Management API — Phase G.2' })
+  res.json({ status: 'OK', message: 'Lead Management API — Phase I.2' })
 );
 
 // ── Global error handler — no stack traces in production ───────
