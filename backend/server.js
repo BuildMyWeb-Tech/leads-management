@@ -27,7 +27,7 @@ app.use(helmet({ contentSecurityPolicy: false }));
 // Set FRONTEND_URL in .env (e.g. https://your-crm.example.com).
 // In development, defaults to localhost:5173. Multiple origins can
 // be space-separated: "https://app.example.com http://localhost:5173"
-const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173', 'https://leads-management-peach.vercel.app')
   .split(' ')
   .map((o) => o.trim())
   .filter(Boolean);
