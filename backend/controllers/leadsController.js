@@ -63,56 +63,172 @@ const getLeads = async (req, res) => {
     }
 
     if (sort === 'priority') {
-      // G.2 FIX (P1-006): DB-side sort via $addFields + $switch so only
-      // the requested page is transferred from MongoDB, not the full
-      // collection. Ranking order matches priorityRanking.js exactly:
-      //   1 Booked, 2 Hot, 3 Completed site visit, 4 Upcoming site visit,
-      //   5 Warm, 6 Cold.
-      const now = new Date();
-      const p = Number(page), l = Number(limit);
-      const total = await Lead.countDocuments(filter);
-      const rawLeads = await Lead.aggregate([
-        { $match: filter },
-        { $addFields: {
-          _priorityRank: { $switch: {
+  // G.2 FIX (P1-006): DB-side sort via $addFields + $switch so only
+  // the requested page is transferred from MongoDB, not the full
+  // collection. Ranking order matches priorityRanking.js exactly:
+  //   1 Booked, 2 Hot, 3 Completed site visit, 4 Upcoming site visit,
+  //   5 Warm, 6 Cold.
+  const now = new Date();
+  const p = Number(page);
+  const l = Number(limit);
+
+  const total = await Lead.countDocuments(filter);
+
+  const rawLeads = await Lead.aggregate([
+    { $match: filter },
+
+    {
+      $addFields: {
+        _priorityRank: {
+          $switch: {
             branches: [
-              { case: { $eq: ['$status', 'Booked'] }, then: 1 },
-              { case: { $eq: ['$priority', 'Hot'] },  then: 2 },
-              { case: { $or: [
-                { $eq: ['$status', 'Site Visit Done'] },
-                { $gt: [{ $size: { $filter: {
-                  input: { $ifNull: ['$siteVisits', []] },
-                  as: 'sv', cond: { $eq: ['$$sv.status', 'completed'] },
-                }}]}, 0] },
-              ]}, then: 3 },
-              { case: { $or: [
-                { $eq: ['$status', 'Site Visit Planned'] },
-                { $gt: [{ $size: { $filter: {
-                  input: { $ifNull: ['$siteVisits', []] },
-                  as: 'sv', cond: { $eq: ['$$sv.status', 'planned'] },
-                }}]}, 0] },
-              ]}, then: 4 },
-              { case: { $eq: ['$priority', 'Warm'] }, then: 5 },
+              // 1 — Booked
+              {
+                case: {
+                  $eq: ['$status', 'Booked'],
+                },
+                then: 1,
+              },
+
+              // 2 — Hot
+              {
+                case: {
+                  $eq: ['$priority', 'Hot'],
+                },
+                then: 2,
+              },
+
+              // 3 — Completed site visit
+              {
+                case: {
+                  $or: [
+                    {
+                      $eq: ['$status', 'Site Visit Done'],
+                    },
+                    {
+                      $gt: [
+                        {
+                          $size: {
+                            $filter: {
+                              input: {
+                                $ifNull: ['$siteVisits', []],
+                              },
+                              as: 'sv',
+                              cond: {
+                                $eq: ['$$sv.status', 'completed'],
+                              },
+                            },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                  ],
+                },
+                then: 3,
+              },
+
+              // 4 — Upcoming/planned site visit
+              {
+                case: {
+                  $or: [
+                    {
+                      $eq: ['$status', 'Site Visit Planned'],
+                    },
+                    {
+                      $gt: [
+                        {
+                          $size: {
+                            $filter: {
+                              input: {
+                                $ifNull: ['$siteVisits', []],
+                              },
+                              as: 'sv',
+                              cond: {
+                                $eq: ['$$sv.status', 'planned'],
+                              },
+                            },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                  ],
+                },
+                then: 4,
+              },
+
+              // 5 — Warm
+              {
+                case: {
+                  $eq: ['$priority', 'Warm'],
+                },
+                then: 5,
+              },
             ],
+
+            // 6 — Cold / everything else
             default: 6,
-          }},
-          _isOverdue: { $and: [
-            { $eq: ['$status', 'Follow Up'] },
-            { $ne:  ['$followUpDate', null] },
-            { $lt:  ['$followUpDate', now]  },
-          ]},
-        }},
-        { $sort: { _priorityRank: 1, _isOverdue: -1, followUpDate: 1, updatedAt: -1, createdAt: -1 } },
-        { $skip:  (p - 1) * l },
-        { $limit: l },
-        { $unset: ['_priorityRank', '_isOverdue'] },
-      ]);
-      const leads = await Lead.populate(rawLeads, [
-        { path: 'assignedDirector',   select: 'name email' },
-        { path: 'assignedTelecaller', select: 'name email' },
-      ]);
-      return res.json({ leads, total, page: p, pages: Math.ceil(total / l) });
-    }
+          },
+        },
+
+        _isOverdue: {
+          $and: [
+            {
+              $eq: ['$status', 'Follow Up'],
+            },
+            {
+              $ne: ['$followUpDate', null],
+            },
+            {
+              $lt: ['$followUpDate', now],
+            },
+          ],
+        },
+      },
+    },
+
+    {
+      $sort: {
+        _priorityRank: 1,
+        _isOverdue: -1,
+        followUpDate: 1,
+        updatedAt: -1,
+        createdAt: -1,
+      },
+    },
+
+    {
+      $skip: (p - 1) * l,
+    },
+
+    {
+      $limit: l,
+    },
+
+    {
+      $unset: ['_priorityRank', '_isOverdue'],
+    },
+  ]);
+
+  const leads = await Lead.populate(rawLeads, [
+    {
+      path: 'assignedDirector',
+      select: 'name email',
+    },
+    {
+      path: 'assignedTelecaller',
+      select: 'name email',
+    },
+  ]);
+
+  return res.json({
+    leads,
+    total,
+    page: p,
+    pages: Math.ceil(total / l),
+  });
+}
 
     const total = await Lead.countDocuments(filter);
     const leads = await Lead.find(filter)
