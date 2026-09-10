@@ -47,7 +47,7 @@ const msUntilNext9amIST = () => {
 
   const next9am = new Date(istNow);
   next9am.setUTCHours(3, 30, 0, 0); // 9:00 AM IST = 03:30 UTC
-  if (next9am <= istNow) {
+  if (next9am <= now) {
     next9am.setUTCDate(next9am.getUTCDate() + 1);
   }
 

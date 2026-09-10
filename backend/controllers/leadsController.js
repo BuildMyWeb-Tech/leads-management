@@ -249,7 +249,18 @@ const updateLead = async (req, res) => {
       }
       await lead.save();
     } else if (['admin', 'director', 'tl'].includes(req.user.role)) {
-      const { callHistory, siteVisits, siteVisit, ...rest } = req.body;
+      // H.2 FIX (H1-003): leadId is immutable after creation (atomic unique
+      // identifier — changing it post-creation corrupts the lead ID system).
+      // captureDate must not be alterable through the normal update workflow.
+      // Both are silently discarded here; no legitimate management UI sends them.
+      const {
+        callHistory,
+        siteVisits,
+        siteVisit,
+        leadId: _leadId,
+        captureDate: _captureDate,
+        ...rest
+      } = req.body;
       Object.assign(lead, rest);
       // Equivalent to telecaller's own behavior: recording a
       // status/notes change also appends to callHistory and refreshes
