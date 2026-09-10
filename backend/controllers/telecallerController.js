@@ -2,6 +2,7 @@ const Lead = require('../models/Lead');
 const audit = require('../utils/auditService');                             // PHASE C
 const { recordCallHistoryEntry, appendSiteVisit, snapshotTrackedFields } = require('../utils/leadUpdateHelpers'); // PHASE C/E
 const { buildOverdueFollowUpQuery } = require('../utils/followUpHelper');    // PHASE E
+const { getISTDayBounds } = require('../utils/dateHelper'); // I2-001
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/telecaller/dashboard
@@ -13,14 +14,15 @@ const getTelecallerDashboard = async (req, res) => {
     const base = { assignedTelecaller: tcId };
 
     const now        = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const todayEnd   = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1);
-    const weekStart  = new Date(todayStart); weekStart.setDate(weekStart.getDate() - 6);
+    // I2-001: use IST calendar day so boundaries are correct on UTC servers
+    const { start: todayStart, end: todayEnd } = getISTDayBounds(now);
+    const weekStart  = new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000);
 
     const [
       totalLeads,
       statusBreakdown,
       todayFollowUps,
+      todayCountExact,   // I2-002: accurate count not capped by display limit
       overdueCount,      // G.2 P1-004: accurate count (not capped by display limit)
       overdueFollowUps,
       recentActivity,
@@ -34,12 +36,19 @@ const getTelecallerDashboard = async (req, res) => {
         { $sort: { count: -1 } },
       ]),
 
-      // Follow-ups due today
+      // Follow-ups due today — display list (limited for UI performance)
       Lead.find({
         ...base,
         status: 'Follow Up',
         followUpDate: { $gte: todayStart, $lt: todayEnd },
       }).sort({ followUpDate: 1 }).limit(20),
+
+      // I2-002: exact today count — separate countDocuments so >20 is not silently capped
+      Lead.countDocuments({
+        ...base,
+        status: 'Follow Up',
+        followUpDate: { $gte: todayStart, $lt: todayEnd },
+      }),
 
       // G.2 FIX (P1-004): accurate overdue count — separate from the
       // display list so >10 overdue leads are not undercounted.
@@ -72,7 +81,7 @@ const getTelecallerDashboard = async (req, res) => {
         totalLeads, called, followUp, interested,
         booked, notInterested, siteVisit, weekLeads, conversionRate,
         overdueCount, // accurate count from countDocuments (G.2 P1-004)
-        todayCount:   todayFollowUps.length,
+        todayCount:   todayCountExact, // I2-002: exact count, not capped by display limit
       },
       statusBreakdown,
       todayFollowUps,

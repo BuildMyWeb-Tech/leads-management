@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Lead = require('../models/Lead');
 const User = require('../models/User');
 const { buildOverdueFollowUpQuery } = require('../utils/followUpHelper');
+const { getISTDayBounds, getISTMidnightUTC } = require('../utils/dateHelper'); // I2-001
 
 // ── Helper: cast string → ObjectId for aggregate pipelines ───
 const toObjectId = (id) => {
@@ -50,10 +51,10 @@ const getDirectorDashboard = async (req, res) => {
     }
 
     const now        = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const weekStart  = new Date(todayStart);
-    weekStart.setDate(todayStart.getDate() - 6);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    // I2-001: use IST calendar day so boundaries are correct on UTC servers
+    const { start: todayStart, end: todayEnd } = getISTDayBounds(now);
+    const weekStart  = new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000);
+    const monthStart = getISTMidnightUTC(new Date(now.getFullYear(), now.getMonth(), 1));
 
     const [
       totalLeads,
@@ -125,7 +126,7 @@ const getDirectorDashboard = async (req, res) => {
       Lead.find({
         ...baseFilter,
         status: 'Follow Up',
-        followUpDate: { $gte: todayStart, $lt: new Date(todayStart.getTime() + 86400000) },
+        followUpDate: { $gte: todayStart, $lt: todayEnd },
       })
         .sort({ followUpDate: 1 })
         .limit(20)
@@ -134,7 +135,7 @@ const getDirectorDashboard = async (req, res) => {
       Lead.find({
         ...baseFilter,
         status: 'Follow Up',
-        followUpDate: { $gte: new Date(todayStart.getTime() + 86400000) },
+        followUpDate: { $gte: todayEnd },
       })
         .sort({ followUpDate: 1 })
         .limit(20)

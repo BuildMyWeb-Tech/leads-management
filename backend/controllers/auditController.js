@@ -1,5 +1,6 @@
 const AuditLog = require('../models/AuditLog');
 const User     = require('../models/User');
+const { getISTDayBounds } = require('../utils/dateHelper'); // I2-001
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/audit/logs
@@ -143,9 +144,10 @@ const getUserActivity = async (req, res) => {
 const getAuditStats = async (req, res) => {
   try {
     const now        = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const weekStart  = new Date(todayStart); weekStart.setDate(weekStart.getDate() - 6);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    // I2-001: use IST calendar day boundaries on UTC servers
+    const { start: todayStart, end: todayEnd } = getISTDayBounds(now);
+    const weekStart  = new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000);
+    const monthStart = new Date(todayStart.getTime() - 29 * 24 * 60 * 60 * 1000);
 
     const [
       total,
@@ -259,14 +261,22 @@ const exportLogs = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 const purgeLogs = async (req, res) => {
   try {
-    const { olderThanDays = 365 } = req.body;
+    // I2-004: enforce a minimum retention floor of 30 days.
+    // Parse carefully: NaN / Infinity / negatives all clamp to 30.
+    const raw  = req.body.olderThanDays;
+    const parsed = Number(raw);
+    const days = (Number.isFinite(parsed) && parsed > 0)
+      ? Math.max(30, Math.floor(parsed))
+      : 365; // default when omitted or invalid
+
     const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - Number(olderThanDays));
+    cutoff.setDate(cutoff.getDate() - days);
 
     const result = await AuditLog.deleteMany({ createdAt: { $lt: cutoff } });
     res.json({
-      message: `${result.deletedCount} audit log(s) purged (older than ${olderThanDays} days)`,
+      message: `${result.deletedCount} audit log(s) purged (older than ${days} days)`,
       deletedCount: result.deletedCount,
+      daysApplied: days,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });

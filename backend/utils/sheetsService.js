@@ -124,11 +124,12 @@ const buildRow = (lead, columnOrder) => {
 // Director | Customer Name | Mobile Number | Remarks / Notes
 //   - Status column removed (see DIRECTOR_VIEW_HEADERS comment).
 //   - Remarks / Notes defaults to '' (blank) — uses lead.notes.
+// I2-006: remarks takes priority over notes for the Remarks/Notes column
 const buildDirectorViewRow = (lead) => ([
   lead.assignedDirector?.name || '',
   lead.name   || '',
   lead.phone  || '',
-  lead.notes  || '',
+  lead.remarks || lead.notes || '',
 ]);
 
 // ── Convert column index (0-based) to A1 letter notation ─────

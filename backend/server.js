@@ -92,6 +92,10 @@ app.get('/api/health', (_req, res) =>
 // ── Global error handler — no stack traces in production ───────
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
+  // I2-003: multer file-size exceeded → 413 with clear message
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ message: 'CSV file exceeds the 5MB limit.' });
+  }
   const isDev = process.env.NODE_ENV !== 'production';
   res.status(err.status || 500).json({
     message: err.message || 'Internal server error',

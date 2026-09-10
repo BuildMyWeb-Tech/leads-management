@@ -20,7 +20,7 @@ const login = async (req, res) => {
     const token = generateToken(user._id);
     res.json({
       token,
-      user: { _id: user._id, name: user.name, email: user.email, role: user.role },
+      user: { _id: user._id, name: user.name, email: user.email, role: user.role, managedBy: user.managedBy },
     });
     audit.userLogin(req, user);
   } catch (err) {

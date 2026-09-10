@@ -8,6 +8,7 @@ const { notify }   = require('../utils/pushService');
 const audit        = require('../utils/auditService');   // PHASE 10
 const { generateLeadId } = require('../utils/leadIdGenerator');           // PHASE C
 const { buildLeadVisibilityFilter } = require('../utils/leadVisibility'); // PHASE C
+const { getISTDayBounds } = require('../utils/dateHelper'); // I2-001
 const { sortLeadsByPriority } = require('../utils/priorityRanking');      // PHASE C
 const { recordCallHistoryEntry, appendSiteVisit, snapshotTrackedFields } = require('../utils/leadUpdateHelpers'); // PHASE C/E
 const { applyLeadBusinessRulesToPlainData } = require('../utils/leadBusinessRules'); // PHASE E
@@ -512,13 +513,13 @@ const getDashboardStats = async (req, res) => {
       Lead.aggregate([{ $match: filter }, { $group: { _id: '$priority', count: { $sum: 1 } } }]),
       // G.2 P2-004: overdue follow-up count
       Lead.countDocuments({ ...filter, status: 'Follow Up', followUpDate: { $ne: null, $lt: now } }),
-      // G.2 P2-004: today follow-up count
+      // G.2 P2-004 / I2-001: today follow-up count — IST calendar day
       Lead.countDocuments({
         ...filter, status: 'Follow Up',
-        followUpDate: {
-          $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-          $lt:  new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1),
-        },
+        followUpDate: (() => {
+          const { start, end } = getISTDayBounds(now);
+          return { $gte: start, $lt: end };
+        })(),
       }),
     ]);
     const unassigned = await Lead.countDocuments({ ...filter, assignedDirector: null });

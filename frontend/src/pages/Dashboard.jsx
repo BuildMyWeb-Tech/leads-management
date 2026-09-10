@@ -110,7 +110,7 @@ export default function Dashboard() {
             <span className="ml-2 text-xs text-gray-400 capitalize">({user?.role})</span>
           </p>
         </div>
-        {(user.role === 'admin' || user.role === 'director') && (
+        {(user.role === 'admin' || user.role === 'director' || user.role === 'tl') && (
           <Link to="/leads/add" className="btn-primary text-sm flex-shrink-0">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
