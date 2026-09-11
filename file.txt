@@ -132,3 +132,5 @@
    📄 tailwind.config.js
    📄 vercel.json
 📄 show-structure.js
+
+npm run seed from backend folder
