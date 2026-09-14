@@ -5,7 +5,8 @@ const mongoose = require('mongoose');
 // There is always exactly one document; use AppState.getOrCreate().
 const appStateSchema = new mongoose.Schema(
   {
-    lastReminderDate: { type: String, default: null }, // 'YYYY-MM-DD' in IST
+    lastReminderDate:    { type: String, default: null }, // 'YYYY-MM-DD' in IST
+    lastMonthlySheetsSync: { type: String, default: null }, // 'YYYY-MM' in IST
   },
   { timestamps: true }
 );

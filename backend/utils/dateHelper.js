@@ -23,4 +23,16 @@ const getISTDayBounds = (now = new Date()) => {
   return { start, end };
 };
 
-module.exports = { getISTMidnightUTC, getISTDayBounds };
+// Returns today's date string 'YYYY-MM-DD' in IST (reusable across schedulers)
+const getISTDateString = (now = new Date()) => {
+  const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+  return istNow.toISOString().slice(0, 10);
+};
+
+// Returns current month string 'YYYY-MM' in IST
+const getISTMonthString = (now = new Date()) => {
+  const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+  return istNow.toISOString().slice(0, 7);
+};
+
+module.exports = { getISTMidnightUTC, getISTDayBounds, getISTDateString, getISTMonthString };

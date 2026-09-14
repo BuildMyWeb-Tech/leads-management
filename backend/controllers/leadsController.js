@@ -515,6 +515,21 @@ const bulkAssign = async (req, res) => {
   try {
     const { leadIds, assignedDirector, assignedTelecaller } = req.body;
     if (!leadIds?.length) return res.status(400).json({ message: 'leadIds required' });
+
+    // N.2: attendance gate — only present employees are eligible for bulk assignment
+    if (assignedTelecaller) {
+      const Attendance = require('../models/Attendance');
+      const { getISTDateString } = require('../utils/dateHelper');
+      const todayIST = getISTDateString();
+      const presentRecord = await Attendance.findOne({
+        employee: assignedTelecaller,
+        businessDate: todayIST,
+      });
+      if (!presentRecord) {
+        return res.status(400).json({ message: 'This employee is not marked present today' });
+      }
+    }
+
     const update = {};
     if (assignedDirector   !== undefined) update.assignedDirector   = assignedDirector   || null;
     if (assignedTelecaller !== undefined) update.assignedTelecaller = assignedTelecaller || null;

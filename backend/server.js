@@ -81,7 +81,8 @@ app.use('/api/allocation', require('./routes/allocation'));
 app.use('/api/director',   require('./routes/director'));
 app.use('/api/telecaller', require('./routes/telecaller'));
 app.use('/api/ocr',        require('./routes/ocr'));
-app.use('/api/sheets',     require('./routes/sheets'));
+app.use('/api/sheets',      require('./routes/sheets'));
+app.use('/api/attendance', require('./routes/attendance'));
 app.use('/api/push',       require('./routes/push'));
 app.use('/api/audit',      require('./routes/audit'));
 
@@ -107,5 +108,7 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   const { startReminderScheduler } = require('./utils/reminderScheduler');
+  const { startSheetsScheduler }  = require('./utils/sheetsScheduler');
   startReminderScheduler();
+  startSheetsScheduler();
 });

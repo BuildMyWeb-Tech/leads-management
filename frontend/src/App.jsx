@@ -135,8 +135,7 @@ export default function App() {
           element={<ProtectedRoute allowedRoles={['admin']}><CSVUpload /></ProtectedRoute>} />
         <Route path="/allocation-config"
           element={<ProtectedRoute allowedRoles={['admin']}><AllocationConfig /></ProtectedRoute>} />
-        <Route path="/sheets-sync"
-          element={<ProtectedRoute allowedRoles={['admin']}><SheetsSync /></ProtectedRoute>} />
+        <Route path="/sheets-sync" element={<Navigate to="/dashboard" replace />} />
         <Route path="/audit-logs"
           element={<ProtectedRoute allowedRoles={['admin']}><AuditLogs /></ProtectedRoute>} />
 

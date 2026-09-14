@@ -6,6 +6,7 @@ import StatusEditor from '../components/leads/StatusEditor';
 import LeadDetailDrawer from '../components/leads/LeadDetailDrawer';
 import PriorityBadge from '../components/leads/PriorityBadge';
 import LeadCard from '../components/telecaller/LeadCard';
+import AttendanceWidget from '../components/attendance/AttendanceWidget';
 import toast from 'react-hot-toast';
 
 function KpiStrip({ kpis }) {
@@ -194,6 +195,9 @@ export default function TelecallerPanel() {
             </button>
           </div>
         </div>
+
+        {/* ── Attendance ─────────────────────────────────── */}
+        <AttendanceWidget />
 
         {/* ── KPI strip ──────────────────────────────────── */}
         {kpis && !kpiLoading && <KpiStrip kpis={kpis} />}
