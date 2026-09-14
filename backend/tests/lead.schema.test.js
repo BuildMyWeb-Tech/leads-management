@@ -66,17 +66,13 @@ test('invalid propertyType is rejected', () => {
   assert.ok(err && err.errors.propertyType);
 });
 
-test('plotSquareFeet accepts Below 1200 / 1200 / Above 1200', () => {
-  for (const value of ['Below 1200', '1200', 'Above 1200']) {
+test('plotSquareFeet accepts any string value (K2: free-text input, enum removed)', () => {
+  // K2: plotSquareFeet is free-text — old fixed values still accepted,
+  // and new arbitrary values are also accepted (no enum constraint).
+  for (const value of ['Below 1200', '1200', 'Above 1200', '2000', '1500 sq ft', '30 x 50 plot']) {
     const lead = new Lead({ ...baseLead(), propertyType: 'Plot', plotSquareFeet: value });
-    assert.equal(lead.validateSync(), undefined);
+    assert.equal(lead.validateSync(), undefined, `"${value}" should be accepted as free-text plotSquareFeet`);
   }
-});
-
-test('invalid plotSquareFeet is rejected', () => {
-  const lead = new Lead({ ...baseLead(), propertyType: 'Plot', plotSquareFeet: '2000' });
-  const err = lead.validateSync();
-  assert.ok(err && err.errors.plotSquareFeet);
 });
 
 test('purpose accepts Investment and Residential', () => {

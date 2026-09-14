@@ -91,7 +91,8 @@ const leadSchema = new mongoose.Schema(
 
     // Only meaningful when propertyType === 'Plot'; left optional —
     // cross-field enforcement is a later (frontend/business) concern.
-    plotSquareFeet: { type: String, enum: ['Below 1200', '1200', 'Above 1200'], default: null },
+    // K2: free-text input — enum removed so any value is accepted (e.g. "1500 sq ft", "30x50")
+    plotSquareFeet: { type: String, default: null },
 
     targetLocation: { type: String, default: '' },
 

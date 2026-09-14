@@ -8,7 +8,7 @@ import CallHistoryList from './CallHistoryList';
 import SiteVisitHistory from './SiteVisitHistory';
 import { LeadFieldSection, FieldRow } from './LeadFieldSection';
 import {
-  PROPERTY_TYPES, PLOT_SQFT_OPTIONS, PURPOSE_OPTIONS,
+  PROPERTY_TYPES, PURPOSE_OPTIONS, PRIORITY_LEVELS,
 } from '../../constants/leadConstants';
 import toast from 'react-hot-toast';
 
@@ -32,6 +32,9 @@ export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
   const [savingProfile, setSavingProfile] = useState(false);
   const [remarks, setRemarks] = useState(lead.remarks || '');
   const [savingRemarks, setSavingRemarks] = useState(false);
+  // K2: priority editing state
+  const [priorityValue, setPriorityValue] = useState(lead.priority || 'Cold');
+  const [savingPriority, setSavingPriority] = useState(false);
 
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
@@ -46,6 +49,7 @@ export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
   useEffect(() => {
     setRemarks(lead.remarks || '');
     setEditingProfile(false);
+    setPriorityValue(lead.priority || 'Cold');
   }, [lead._id]);
 
   if (!lead) return null;
@@ -76,9 +80,7 @@ export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
   const validateProfileForm = (form) => {
     if (!form.propertyType) return 'Property Type is required';
     if (!['Plot', 'House'].includes(form.propertyType)) return 'Invalid Property Type';
-    if (form.propertyType === 'Plot' && form.plotSquareFeet && !PLOT_SQFT_OPTIONS.includes(form.plotSquareFeet)) {
-      return 'Invalid Plot Sq. Ft. value';
-    }
+    // K2: plotSquareFeet is free-text — no enum validation
     if (!form.targetLocation.trim()) return 'Target Location is required';
     if (!form.budget.trim()) return 'Budget is required';
     if (!form.purpose) return 'Purpose is required';
@@ -115,6 +117,22 @@ export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
       toast.success('Remarks saved');
     } finally {
       setSavingRemarks(false);
+    }
+  };
+
+  // K2: privileged priority update
+  const savePriority = async (newPriority) => {
+    if (newPriority === lead.priority) return;
+    setSavingPriority(true);
+    try {
+      await onStatusSave(lead._id, { priority: newPriority });
+      setPriorityValue(newPriority);
+      toast.success(`Priority set to ${newPriority}`);
+    } catch {
+      setPriorityValue(lead.priority || 'Cold');
+      toast.error('Failed to update priority');
+    } finally {
+      setSavingPriority(false);
     }
   };
 
@@ -162,7 +180,28 @@ export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
         {/* Priority + pipeline strip */}
         <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex-shrink-0 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
-            <PriorityBadge priority={lead.priority} />
+            {/* K2: editable priority select for admin/director/tl; display-only badge for employee */}
+            {canEditProfile ? (
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-500 font-medium">Priority:</label>
+                <select
+                  value={priorityValue}
+                  onChange={(e) => savePriority(e.target.value)}
+                  disabled={savingPriority}
+                  className="text-xs border border-gray-200 rounded-md px-2 py-1 bg-white
+                             focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                >
+                  {PRIORITY_LEVELS.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+                {savingPriority && (
+                  <span className="text-xs text-gray-400">Saving...</span>
+                )}
+              </div>
+            ) : (
+              <PriorityBadge priority={lead.priority} />
+            )}
             {lead.captureDate && (
               <span className="text-xs text-gray-400">Captured {fmtDate(lead.captureDate)}</span>
             )}
@@ -218,12 +257,15 @@ export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
                   </div>
                   {profileForm.propertyType === 'Plot' && (
                     <div>
-                      <label className="label text-xs">Plot Sq. Ft.</label>
-                      <select className="input-sm" value={profileForm.plotSquareFeet}
-                        onChange={(e) => setProfileForm({ ...profileForm, plotSquareFeet: e.target.value })}>
-                        <option value="">— Select —</option>
-                        {PLOT_SQFT_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-                      </select>
+                      {/* K2: free-text input replaces fixed dropdown */}
+                      <label className="label text-xs">Plot Area</label>
+                      <input
+                        className="input-sm"
+                        placeholder="e.g. 1500 sq ft"
+                        value={profileForm.plotSquareFeet}
+                        maxLength={50}
+                        onChange={(e) => setProfileForm({ ...profileForm, plotSquareFeet: e.target.value })}
+                      />
                     </div>
                   )}
                   <div>

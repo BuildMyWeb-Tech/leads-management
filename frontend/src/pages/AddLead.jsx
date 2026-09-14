@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 import {
-  LEAD_SOURCES, PROPERTY_TYPES, PLOT_SQFT_OPTIONS, PURPOSE_OPTIONS,
+  LEAD_SOURCES, PROPERTY_TYPES, PURPOSE_OPTIONS,
 } from '../constants/leadConstants';
 import toast from 'react-hot-toast';
 
@@ -15,6 +16,7 @@ const INITIAL = {
   targetLocation: '', budget: '', purpose: '',
   propertyInterest: '', remarks: '', notes: '',
   followUpDate: '',
+  siteVisitDate: '',
 };
 
 /**
@@ -30,15 +32,21 @@ const isValidPhone = (raw) => {
 };
 
 /**
- * PHASE D: Lead ID, Capture Date, and Priority are intentionally NOT
+ * PHASE D / K2: Lead ID, Capture Date, and Priority are intentionally NOT
  * fields in this form — they are generated/controlled entirely by the
- * backend (Phase B/C: leadIdGenerator.js, Lead.js pre-save hook,
- * leadBusinessRules.js). The form never sends them.
+ * backend. The form never sends them.
+ *
+ * K2: plotSquareFeet is now free-text (no dropdown).
+ * K2: siteVisitDate creates a siteVisits[] entry via appendSiteVisit.
+ * K2: Employee (telecaller) can access this form; server enforces self-ownership.
  */
 export default function AddLead() {
   const navigate = useNavigate();
+  const { user }  = useAuth();
   const [form, setForm] = useState(INITIAL);
   const [loading, setLoading] = useState(false);
+
+  const isEmployee = user?.role === 'telecaller';
 
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
@@ -55,8 +63,9 @@ export default function AddLead() {
       toast.error('Select a valid Property Type');
       return false;
     }
-    if (form.propertyType === 'Plot' && !PLOT_SQFT_OPTIONS.includes(form.plotSquareFeet)) {
-      toast.error('Select a valid Plot Square Feet category');
+    // K2: plotSquareFeet is free-text — just require it is non-empty when propertyType is Plot
+    if (form.propertyType === 'Plot' && !form.plotSquareFeet.trim()) {
+      toast.error('Plot Area is required when Property Type is Plot');
       return false;
     }
     if (!form.targetLocation.trim()) {
@@ -81,12 +90,20 @@ export default function AddLead() {
     setLoading(true);
     try {
       const payload = { ...form };
-      // House (or unset) never carries a plot size — mirrors the
-      // backend's own clearPlotSquareFeetIfNotPlot rule (defense in
-      // depth only; the backend remains authoritative).
+      // House (or unset) never carries a plot size
       if (payload.propertyType !== 'Plot') payload.plotSquareFeet = '';
       if (payload.followUpDate) payload.followUpDate = new Date(payload.followUpDate).toISOString();
       else delete payload.followUpDate;
+
+      // K2: site visit date → siteVisit object using existing siteVisits[] architecture
+      if (payload.siteVisitDate) {
+        payload.siteVisit = {
+          plannedDate: new Date(payload.siteVisitDate).toISOString(),
+          status: 'planned',
+          notes: '',
+        };
+      }
+      delete payload.siteVisitDate;
 
       const { data: created } = await api.post('/leads', payload);
       toast.success(
@@ -165,11 +182,16 @@ export default function AddLead() {
               </div>
               {form.propertyType === 'Plot' && (
                 <div>
-                  <label className="label">Plot Square Feet <span className="text-red-400">*</span></label>
-                  <select className="input" value={form.plotSquareFeet} onChange={set('plotSquareFeet')} required>
-                    <option value="">— Select —</option>
-                    {PLOT_SQFT_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-                  </select>
+                  {/* K2: free-text input replaces fixed dropdown */}
+                  <label className="label">Plot Area <span className="text-red-400">*</span></label>
+                  <input
+                    className="input"
+                    placeholder="e.g. 1500 sq ft, 30×50 plot"
+                    value={form.plotSquareFeet}
+                    onChange={set('plotSquareFeet')}
+                    maxLength={50}
+                    required
+                  />
                 </div>
               )}
               <div>
@@ -184,36 +206,51 @@ export default function AddLead() {
                 </select>
               </div>
               <div className="sm:col-span-2">
-                <label className="label">Property Interest (legacy/details)</label>
+                <label className="label">Property Interest (details)</label>
                 <input className="input" placeholder="Optional free-text description"
                   value={form.propertyInterest} onChange={set('propertyInterest')} />
               </div>
             </div>
           </div>
 
-          {/* Optional follow-up + remarks */}
+          {/* Follow-up, Site Visit, Remarks */}
           <div>
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-              Follow-up &amp; Remarks (optional)
+              Scheduling (optional)
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="label">Next Follow-Up Date &amp; Time</label>
                 <input type="datetime-local" className="input" value={form.followUpDate} onChange={set('followUpDate')} />
               </div>
+              {/* K2: Site Visit Date field */}
               <div>
+                <label className="label">Site Visit Date &amp; Time</label>
+                <input type="datetime-local" className="input" value={form.siteVisitDate} onChange={set('siteVisitDate')} />
+                <p className="text-xs text-gray-400 mt-1">Creates a planned site visit entry</p>
+              </div>
+              <div className="sm:col-span-2">
                 <label className="label">Remarks / Objection</label>
                 <input className="input" placeholder="Optional" value={form.remarks} onChange={set('remarks')} />
               </div>
             </div>
           </div>
 
-          {/* Notes */}
+          {/* Call Notes (K2: renamed from Notes) */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Notes</h3>
-            <textarea className="input" rows={3} placeholder="Any initial notes about this lead..."
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+              Call Notes
+            </h3>
+            <textarea className="input" rows={3} placeholder="Notes from initial call or enquiry..."
               value={form.notes} onChange={set('notes')} />
           </div>
+
+          {/* Employee info banner — server will auto-assign this lead to you */}
+          {isEmployee && (
+            <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-2.5 text-xs text-blue-700">
+              This lead will be assigned to your account automatically.
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex gap-3 pt-1">

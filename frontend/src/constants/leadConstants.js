@@ -53,6 +53,8 @@ export const ALLOWED_STATUS_TRANSITIONS = {
 
 export const PROPERTY_TYPES = ['Plot', 'House'];
 
+// K2: PLOT_SQFT_OPTIONS retired from Add Lead form (now free-text input).
+// Kept here for any legacy display/filter code that may still reference old values.
 export const PLOT_SQFT_OPTIONS = ['Below 1200', '1200', 'Above 1200'];
 
 export const PURPOSE_OPTIONS = ['Investment', 'Residential'];

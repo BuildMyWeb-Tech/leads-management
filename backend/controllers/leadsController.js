@@ -266,6 +266,7 @@ const createLead = async (req, res) => {
       targetLocation, purpose, budget,
       remarks, notes, followUpDate,
       assignedDirector, assignedTelecaller,
+      siteVisit,
     } = req.body;
     const leadData = {
       name, phone, email, source,
@@ -279,6 +280,11 @@ const createLead = async (req, res) => {
       if (leadData[k] === undefined) delete leadData[k];
     });
 
+    // K2: Employee (telecaller) creates lead for themselves — server enforces ownership
+    if (req.user.role === 'telecaller') {
+      leadData.assignedTelecaller = req.user._id;
+    }
+
     if (!leadData.assignedDirector) {
       try {
         const pick = await pickNextDirector();
@@ -286,6 +292,17 @@ const createLead = async (req, res) => {
       } catch (e) { console.warn('Auto-allocation skipped:', e.message); }
     }
     const lead = await Lead.create(leadData);
+
+    // K2: If a site visit was provided, append it using the existing architecture.
+    // appendSiteVisit uses plannedDate (not date) per leadUpdateHelpers.js contract.
+    if (siteVisit && (siteVisit.plannedDate || siteVisit.date)) {
+      appendSiteVisit(lead, {
+        plannedDate: siteVisit.plannedDate || siteVisit.date,
+        status: siteVisit.status || 'planned',
+        notes: siteVisit.notes || '',
+      });
+      await lead.save();
+    }
     const populated = await Lead.findById(lead._id)
       .populate('assignedDirector',   'name email')
       .populate('assignedTelecaller', 'name email');

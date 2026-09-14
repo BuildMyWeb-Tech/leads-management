@@ -9,6 +9,7 @@ import PriorityBadge from '../components/leads/PriorityBadge';
 import FollowUpBadge from '../components/leads/FollowUpBadge';
 import SiteVisitBadge from '../components/leads/SiteVisitBadge';
 import { LEAD_STATUSES, LEAD_SOURCES, STATUS_BAR_COLORS, STATUS_BADGE_CLASSES } from '../constants/leadConstants';
+import KanbanBoard from '../components/leads/KanbanBoard';
 import toast from 'react-hot-toast';
 
 const STATUS_GROUPS = [
@@ -110,6 +111,7 @@ export default function Leads() {
 
   const [drawerLead, setDrawerLead] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'board'
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
@@ -154,6 +156,12 @@ export default function Leads() {
       toast.error(err.response?.data?.message || 'Update failed');
       throw err;
     }
+  };
+
+  const handlePriorityChange = async (leadId, newPriority) => {
+    const { data: updated } = await api.put(`/leads/${leadId}`, { priority: newPriority });
+    setLeads((prev) => prev.map((l) => (l._id === leadId ? updated : l)));
+    if (drawerLead?._id === leadId) setDrawerLead(updated);
   };
 
   const handleDelete = async (id, name) => {
@@ -203,7 +211,7 @@ export default function Leads() {
                                  flex items-center justify-center font-bold">!</span>
               )}
             </button>
-            {['admin', 'director', 'tl'].includes(user.role) && (
+            {['admin', 'director', 'tl', 'telecaller'].includes(user.role) && (
               <Link to="/leads/add" className="btn-primary text-sm">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -298,20 +306,47 @@ export default function Leads() {
             </button>
           )}
           {/* Sort toggle — uses the backend's existing ?sort=priority support */}
+          {viewMode === 'list' && (
+            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden text-xs">
+              <button
+                onClick={() => setSortMode('createdAt')}
+                className={`px-3 py-2 font-medium transition-colors touch-manipulation
+                  ${sortMode === 'createdAt' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600'}`}
+              >
+                Recent
+              </button>
+              <button
+                onClick={() => setSortMode('priority')}
+                className={`px-3 py-2 font-medium transition-colors touch-manipulation
+                  ${sortMode === 'priority' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600'}`}
+              >
+                Priority
+              </button>
+            </div>
+          )}
+          {/* View mode toggle: List | Board */}
           <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden text-xs">
             <button
-              onClick={() => setSortMode('createdAt')}
-              className={`px-3 py-2 font-medium transition-colors touch-manipulation
-                ${sortMode === 'createdAt' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600'}`}
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-2 font-medium transition-colors touch-manipulation flex items-center gap-1
+                ${viewMode === 'list' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600'}`}
             >
-              Recent
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+              List
             </button>
             <button
-              onClick={() => setSortMode('priority')}
-              className={`px-3 py-2 font-medium transition-colors touch-manipulation
-                ${sortMode === 'priority' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600'}`}
+              onClick={() => setViewMode('board')}
+              className={`px-3 py-2 font-medium transition-colors touch-manipulation flex items-center gap-1
+                ${viewMode === 'board' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600'}`}
             >
-              Priority
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+              </svg>
+              Board
             </button>
           </div>
         </div>
@@ -337,12 +372,18 @@ export default function Leads() {
               </>
             ) : (
               <>No leads yet.{' '}
-                {['admin', 'director', 'tl'].includes(user.role) && (
+                {['admin', 'director', 'tl', 'telecaller'].includes(user.role) && (
                   <Link to="/leads/add" className="text-blue-600 hover:underline">Add one?</Link>
                 )}
               </>
             )}
           </div>
+        ) : viewMode === 'board' ? (
+          <KanbanBoard
+            leads={leads}
+            onPriorityChange={handlePriorityChange}
+            onCardClick={setDrawerLead}
+          />
         ) : (
           <>
             {/* Mobile: card list */}
@@ -464,7 +505,7 @@ export default function Leads() {
         )}
 
         {/* ── Pagination ────────────────────────────────── */}
-        {pages > 1 && (
+        {pages > 1 && viewMode === 'list' && (
           <div className="flex items-center justify-between mt-4">
             <span className="text-xs text-gray-500">
               Page {page} of {pages} — {total} leads

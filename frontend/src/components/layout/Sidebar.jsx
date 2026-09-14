@@ -52,10 +52,18 @@ const NAV_LINKS = [
   },
   {
     to: '/leads/add', label: 'Add Lead',
-    roles: ['admin','director','tl'],
+    roles: ['admin','director','tl','telecaller'],
     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
         d="M12 4v16m8-8H4" />
+    </svg>,
+  },
+  {
+    to: '/admin/users', label: 'Users',
+    roles: ['admin','tl'],
+    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
     </svg>,
   },
   {
@@ -121,7 +129,8 @@ const ROLE_BADGE = {
   tl:         'bg-teal-100 text-teal-700',
   telecaller: 'bg-green-100 text-green-700',
 };
-const ROLE_LABEL  = { admin: 'Admin', director: 'Director', tl: 'Team Lead', telecaller: 'Telecaller' };
+// K2: 'telecaller' DB value remains; only the UI label changes to 'Employee'
+const ROLE_LABEL  = { admin: 'Admin', director: 'Director', tl: 'Team Lead', telecaller: 'Employee' };
 const ADMIN_ONLY  = ['Import CSV', 'Allocation Engine', 'Sheets Sync', 'Audit Logs'];
 
 /**

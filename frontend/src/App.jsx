@@ -16,6 +16,7 @@ import OcrCapture                   from './pages/OcrCapture';
 import SheetsSync                   from './pages/SheetsSync';
 import NotificationSettings         from './pages/NotificationSettings';
 import AuditLogs                    from './pages/AuditLogs';
+import UserManagement               from './pages/UserManagement';
 
 import OfflineBanner                from './components/pwa/OfflineBanner';
 import UpdateBanner                 from './components/pwa/UpdateBanner';
@@ -119,9 +120,9 @@ export default function App() {
         <Route path="/notifications"
           element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
 
-        {/* Admin + Director + TL — equivalent lead-management tier (Phase D sign-off) */}
+        {/* Admin + Director + TL + Employee — K2: employee can create leads */}
         <Route path="/leads/add"
-          element={<ProtectedRoute allowedRoles={['admin','director','tl']}><AddLead /></ProtectedRoute>} />
+          element={<ProtectedRoute allowedRoles={['admin','director','tl','telecaller']}><AddLead /></ProtectedRoute>} />
         <Route path="/allocate"
           element={<ProtectedRoute allowedRoles={['admin','director']}><Allocate /></ProtectedRoute>} />
         <Route path="/director-dashboard"
@@ -139,7 +140,11 @@ export default function App() {
         <Route path="/audit-logs"
           element={<ProtectedRoute allowedRoles={['admin']}><AuditLogs /></ProtectedRoute>} />
 
-        {/* Telecaller */}
+        {/* K2: User Management — admin + TL */}
+        <Route path="/admin/users"
+          element={<ProtectedRoute allowedRoles={['admin','tl']}><UserManagement /></ProtectedRoute>} />
+
+        {/* Telecaller / Employee */}
         <Route path="/my-leads"
           element={<ProtectedRoute allowedRoles={['telecaller','admin']}><TelecallerPanel /></ProtectedRoute>} />
 

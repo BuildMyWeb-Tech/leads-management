@@ -41,7 +41,7 @@ router.get('/', getLeads);
 // and CSV import remain admin/director-only and admin-only
 // respectively, per the earlier explicit Phase C security-hardening
 // instruction that was not overridden by this decision.
-router.post('/', authorize('admin', 'director', 'tl'), createLead);
+router.post('/', authorize('admin', 'director', 'tl', 'telecaller'), createLead);
 router.post('/bulk-assign', authorize('admin', 'director'), bulkAssign);
 router.post('/import-csv', authorize('admin'), heavyOpLimiter, csvUpload.single('file'), importCSV);
 
