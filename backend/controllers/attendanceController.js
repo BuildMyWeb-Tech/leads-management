@@ -94,4 +94,94 @@ const getPresentEmployees = async (req, res) => {
   }
 };
 
-module.exports = { markPresent, getTodayStatus, getPresentEmployees };
+// GET /api/attendance/history
+// telecaller only — returns the calling employee's own attendance history (paginated)
+const getOwnHistory = async (req, res) => {
+  try {
+    const page  = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 30));
+    const skip  = (page - 1) * limit;
+
+    const [records, total] = await Promise.all([
+      Attendance.find({ employee: req.user._id })
+        .sort({ businessDate: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Attendance.countDocuments({ employee: req.user._id }),
+    ]);
+
+    res.json({ records, total, page, limit });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// GET /api/attendance/report?date=YYYY-MM-DD
+// admin/director/tl — returns present/absent summary for all scoped telecallers on a date
+const getAttendanceReport = async (req, res) => {
+  try {
+    const date = req.query.date || getISTDateString();
+
+    // Build employee scope — TL sees only own team
+    const empFilter = { role: 'telecaller' };
+    if (req.user.role === 'tl') empFilter.managedBy = req.user._id;
+
+    const [employees, attendanceRecords] = await Promise.all([
+      User.find(empFilter).select('_id name email isActive managedBy').lean(),
+      Attendance.find({ businessDate: date }).lean(),
+    ]);
+
+    const presentSet = new Set(attendanceRecords.map((r) => String(r.employee)));
+
+    const result = employees.map((emp) => {
+      const record = attendanceRecords.find((r) => String(r.employee) === String(emp._id)) || null;
+      return {
+        employee: { _id: emp._id, name: emp.name, email: emp.email, isActive: emp.isActive },
+        businessDate: date,
+        markedAt:     record ? record.markedAt : null,
+        present:      presentSet.has(String(emp._id)),
+        markedBy:     record ? { _id: emp._id, name: emp.name } : null,
+      };
+    });
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// GET /api/attendance/employee/:id/history?page=1&limit=30
+// admin/director/tl — returns one employee's full attendance history
+// TL: only allowed for employees in their own team (managedBy = req.user._id)
+const getEmployeeHistory = async (req, res) => {
+  try {
+    // Validate the target employee exists and is a telecaller
+    const empFilter = { _id: req.params.id, role: 'telecaller' };
+    if (req.user.role === 'tl') empFilter.managedBy = req.user._id;
+
+    const employee = await User.findOne(empFilter).select('_id name email isActive').lean();
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee not found or access denied' });
+    }
+
+    const page  = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 30));
+    const skip  = (page - 1) * limit;
+
+    const [records, total] = await Promise.all([
+      Attendance.find({ employee: req.params.id })
+        .sort({ businessDate: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Attendance.countDocuments({ employee: req.params.id }),
+    ]);
+
+    res.json({ employee, records, total, page, limit });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { markPresent, getTodayStatus, getPresentEmployees, getOwnHistory, getAttendanceReport, getEmployeeHistory };

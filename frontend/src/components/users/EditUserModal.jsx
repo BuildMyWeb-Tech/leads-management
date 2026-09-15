@@ -1,78 +1,86 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
 
+const ROLE_OPTIONS = [
+  { value: 'tl',         label: 'Team Lead' },
+  { value: 'telecaller', label: 'Employee' },
+];
+
 /**
- * CreateUserModal — modal/drawer for creating a new user.
+ * EditUserModal — allows Admin to edit an existing user.
  *
  * Props:
- *   type      — 'tl' | 'employee' — what kind of user to create
+ *   user      — the user object to edit
+ *   tls       — list of TL users for the managedBy dropdown
  *   onClose   — callback to close the modal
- *   onCreated — callback(newUser) called on success
- *   tls       — array of TL users (for admin creating employee; not shown to TL)
+ *   onUpdated — callback(updatedUser) called on success
  */
-export default function CreateUserModal({ type, onClose, onCreated, tls = [] }) {
-  const { user } = useAuth();
-  const [form, setForm] = useState({ name: '', email: '', password: '', managedBy: '' });
-  const [loading, setLoading] = useState(false);
+export default function EditUserModal({ user: target, onClose, onUpdated, tls = [] }) {
+  const [form, setForm] = useState({
+    name:      target.name  || '',
+    email:     target.email || '',
+    role:      target.role  || 'telecaller',
+    managedBy: target.managedBy?._id || target.managedBy || '',
+    password:  '',
+  });
+  const [loading,  setLoading]  = useState(false);
   const [showPass, setShowPass] = useState(false);
 
-  // When modal opens for a specific type, reset form and hide password
+  // Re-sync if target changes
   useEffect(() => {
-    setForm({ name: '', email: '', password: '', managedBy: '' });
+    setForm({
+      name:      target.name  || '',
+      email:     target.email || '',
+      role:      target.role  || 'telecaller',
+      managedBy: target.managedBy?._id || target.managedBy || '',
+      password:  '',
+    });
     setShowPass(false);
-  }, [type]);
-
-  const isAdmin    = user?.role === 'admin';
-  const isEmployee = type === 'employee';
+  }, [target._id]);
 
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.email.trim() || !form.password.trim()) {
-      toast.error('Name, email, and password are required');
+    if (!form.name.trim() || !form.email.trim()) {
+      toast.error('Name and email are required');
       return;
     }
-    if (isAdmin && isEmployee && !form.managedBy) {
-      toast.error('Please select a Team Lead for this employee');
-      return;
-    }
-
     setLoading(true);
     try {
       const payload = {
-        name:     form.name.trim(),
-        email:    form.email.trim(),
-        password: form.password,
-        role:     isEmployee ? 'telecaller' : 'tl',
+        name:  form.name.trim(),
+        email: form.email.trim(),
+        role:  form.role,
       };
-      // Admin assigning employee to a TL
-      if (isAdmin && isEmployee && form.managedBy) {
-        payload.managedBy = form.managedBy;
+      // Only send managedBy if role is telecaller
+      if (form.role === 'telecaller') {
+        payload.managedBy = form.managedBy || null;
       }
-      const { data } = await api.post('/users', payload);
-      toast.success(`${isEmployee ? 'Employee' : 'Team Lead'} created successfully`);
-      onCreated(data);
+      // Only send password if a new one was entered
+      if (form.password.trim()) {
+        payload.password = form.password.trim();
+      }
+      const { data } = await api.put(`/users/${target._id}`, payload);
+      toast.success(`${data.name} updated successfully`);
+      onUpdated(data);
       onClose();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to create user');
+      toast.error(err.response?.data?.message || 'Failed to update user');
     } finally {
       setLoading(false);
     }
   };
 
-  const title = isEmployee ? 'Create Employee' : 'Create Team Lead';
-
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-40 backdrop-blur-[1px]" onClick={onClose} />
       <div className="fixed z-50 inset-x-4 top-1/2 -translate-y-1/2
-                      sm:inset-auto sm:top-auto sm:bottom-auto sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:top-1/2
+                      sm:inset-auto sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:top-1/2
                       bg-white rounded-2xl shadow-xl max-w-sm w-full mx-auto p-6">
         <div className="flex items-center justify-between mb-5">
-          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+          <h3 className="text-base font-semibold text-gray-900">Edit User</h3>
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
@@ -93,15 +101,35 @@ export default function CreateUserModal({ type, onClose, onCreated, tls = [] }) 
             <input className="input" type="email" placeholder="email@example.com" value={form.email} onChange={set('email')} required />
           </div>
           <div>
-            <label className="label">Password <span className="text-red-400">*</span></label>
+            <label className="label">Role</label>
+            <select className="input" value={form.role} onChange={set('role')}>
+              {ROLE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {form.role === 'telecaller' && (
+            <div>
+              <label className="label">Assign to Team Lead</label>
+              <select className="input" value={form.managedBy} onChange={set('managedBy')}>
+                <option value="">— Unassigned —</option>
+                {tls.map((tl) => (
+                  <option key={tl._id} value={tl._id}>{tl.name} ({tl.email})</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="label">New Password <span className="text-gray-400 font-normal text-xs">(leave blank to keep current)</span></label>
             <div className="relative">
               <input
                 className="input pr-10"
                 type={showPass ? 'text' : 'password'}
-                placeholder="Set a password"
+                placeholder="Enter new password"
                 value={form.password}
                 onChange={set('password')}
-                required
                 autoComplete="new-password"
               />
               <button
@@ -134,26 +162,13 @@ export default function CreateUserModal({ type, onClose, onCreated, tls = [] }) 
             </div>
           </div>
 
-          {/* Admin assigning employee to a TL — not shown when TL creates their own employee */}
-          {isAdmin && isEmployee && (
-            <div>
-              <label className="label">Assign to Team Lead <span className="text-red-400">*</span></label>
-              <select className="input" value={form.managedBy} onChange={set('managedBy')} required>
-                <option value="">— Select Team Lead —</option>
-                {tls.map((tl) => (
-                  <option key={tl._id} value={tl._id}>{tl.name} ({tl.email})</option>
-                ))}
-              </select>
-            </div>
-          )}
-
           <div className="flex gap-3 pt-1">
             <button
               type="submit"
               disabled={loading}
               className="btn-primary flex-1 justify-center"
             >
-              {loading ? 'Creating...' : `Create ${isEmployee ? 'Employee' : 'Team Lead'}`}
+              {loading ? 'Saving...' : 'Save Changes'}
             </button>
             <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
           </div>

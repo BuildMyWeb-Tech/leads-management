@@ -16,6 +16,8 @@ import OcrCapture                   from './pages/OcrCapture';
 import NotificationSettings         from './pages/NotificationSettings';
 import AuditLogs                    from './pages/AuditLogs';
 import UserManagement               from './pages/UserManagement';
+import AttendancePage               from './pages/AttendancePage';
+import AdminAttendancePage          from './pages/AdminAttendancePage';
 
 import OfflineBanner                from './components/pwa/OfflineBanner';
 import UpdateBanner                 from './components/pwa/UpdateBanner';
@@ -141,6 +143,12 @@ export default function App() {
         {/* K2: User Management — admin + TL */}
         <Route path="/admin/users"
           element={<ProtectedRoute allowedRoles={['admin','tl']}><UserManagement /></ProtectedRoute>} />
+
+        {/* R.2: Attendance */}
+        <Route path="/attendance"
+          element={<ProtectedRoute allowedRoles={['telecaller']}><AttendancePage /></ProtectedRoute>} />
+        <Route path="/admin/attendance"
+          element={<ProtectedRoute allowedRoles={['admin','director','tl']}><AdminAttendancePage /></ProtectedRoute>} />
 
         {/* Telecaller / Employee */}
         <Route path="/my-leads"

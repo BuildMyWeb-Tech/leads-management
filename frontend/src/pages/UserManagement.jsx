@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import CreateUserModal from '../components/users/CreateUserModal';
+import EditUserModal from '../components/users/EditUserModal';
 
 const ROLE_LABEL = { admin: 'Admin', director: 'Director', tl: 'Team Lead', telecaller: 'Employee' };
 
@@ -35,6 +36,8 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal]   = useState(null); // 'tl' | 'employee' | null
   const [togglingId, setTogglingId] = useState(null);
+  const [editTarget, setEditTarget] = useState(null); // user object to edit
+  const [confirmDeactivate, setConfirmDeactivate] = useState(null); // user to deactivate/activate
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -71,6 +74,7 @@ export default function UserManagement() {
   };
 
   const toggleActive = async (u) => {
+    setConfirmDeactivate(null);
     setTogglingId(u._id);
     try {
       const { data } = await api.put(`/users/${u._id}`, { isActive: !u.isActive });
@@ -80,6 +84,13 @@ export default function UserManagement() {
       toast.error(err.response?.data?.message || 'Failed to update user');
     } finally {
       setTogglingId(null);
+    }
+  };
+
+  const handleUpdated = (updatedUser) => {
+    setUsers((prev) => prev.map((x) => x._id === updatedUser._id ? updatedUser : x));
+    if (updatedUser.role === 'tl') {
+      setTls((prev) => prev.map((x) => x._id === updatedUser._id ? updatedUser : x));
     }
   };
 
@@ -167,13 +178,46 @@ export default function UserManagement() {
                       </td>
                       {isAdmin && (
                         <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => toggleActive(u)}
-                            disabled={togglingId === u._id}
-                            className="text-xs text-gray-500 hover:text-blue-600 disabled:opacity-40 transition-colors"
-                          >
-                            {togglingId === u._id ? '...' : (u.isActive ? 'Deactivate' : 'Activate')}
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            {/* Edit icon */}
+                            <button
+                              onClick={() => setEditTarget(u)}
+                              title="Edit user"
+                              className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5
+                                     m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            {/* Deactivate / Activate icon */}
+                            <button
+                              onClick={() => setConfirmDeactivate(u)}
+                              disabled={togglingId === u._id}
+                              title={u.isActive ? 'Deactivate user' : 'Activate user'}
+                              className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors disabled:opacity-40
+                                ${u.isActive
+                                  ? 'text-gray-400 hover:text-red-600 hover:bg-red-50'
+                                  : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
+                                }`}
+                            >
+                              {togglingId === u._id ? (
+                                <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                              ) : u.isActive ? (
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                    d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636
+                                       m12.728 12.728L5.636 5.636" />
+                                </svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              )}
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -206,13 +250,27 @@ export default function UserManagement() {
                     <p className="text-xs text-gray-400 mt-1">TL: {manager.name}</p>
                   )}
                   {isAdmin && (
-                    <button
-                      onClick={() => toggleActive(u)}
-                      disabled={togglingId === u._id}
-                      className="mt-2 text-xs text-gray-500 hover:text-blue-600 disabled:opacity-40"
-                    >
-                      {togglingId === u._id ? '...' : (u.isActive ? 'Deactivate' : 'Activate')}
-                    </button>
+                    <div className="flex items-center gap-3 mt-2">
+                      <button
+                        onClick={() => setEditTarget(u)}
+                        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 transition-colors"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5
+                               m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeactivate(u)}
+                        disabled={togglingId === u._id}
+                        className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-40
+                          ${u.isActive ? 'text-gray-500 hover:text-red-600' : 'text-gray-500 hover:text-green-600'}`}
+                      >
+                        {u.isActive ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
                   )}
                 </div>
               );
@@ -228,6 +286,55 @@ export default function UserManagement() {
           onClose={() => setModal(null)}
           onCreated={handleCreated}
         />
+      )}
+
+      {editTarget && (
+        <EditUserModal
+          user={editTarget}
+          tls={tls}
+          onClose={() => setEditTarget(null)}
+          onUpdated={(updated) => { handleUpdated(updated); setEditTarget(null); }}
+        />
+      )}
+
+      {/* Deactivate / Activate confirmation dialog */}
+      {confirmDeactivate && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-40 backdrop-blur-[1px]"
+            onClick={() => setConfirmDeactivate(null)} />
+          <div className="fixed z-50 inset-x-4 top-1/2 -translate-y-1/2
+                          sm:inset-auto sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:top-1/2
+                          bg-white rounded-2xl shadow-xl max-w-sm w-full mx-auto p-6">
+            <h3 className="text-base font-semibold text-gray-900 mb-2">
+              {confirmDeactivate.isActive ? 'Deactivate User' : 'Activate User'}
+            </h3>
+            <p className="text-sm text-gray-600 mb-5">
+              {confirmDeactivate.isActive
+                ? <>Are you sure you want to deactivate <strong>{confirmDeactivate.name}</strong>?
+                   They will immediately lose access to the system. Historical data is preserved.</>
+                : <>Reactivate <strong>{confirmDeactivate.name}</strong>? They will regain access to the system.</>
+              }
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => toggleActive(confirmDeactivate)}
+                className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors
+                  ${confirmDeactivate.isActive
+                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                    : 'bg-green-600 hover:bg-green-700 text-white'
+                  }`}
+              >
+                {confirmDeactivate.isActive ? 'Deactivate' : 'Activate'}
+              </button>
+              <button
+                onClick={() => setConfirmDeactivate(null)}
+                className="btn-ghost"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

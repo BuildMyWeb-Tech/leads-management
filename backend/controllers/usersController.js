@@ -57,12 +57,40 @@ const createUser = async (req, res) => {
 
 const updateUser = async (req, res) => {
   try {
-    const { name, email, role, isActive, managedBy } = req.body;
-    const update = { name, email, role, isActive };
-    // PHASE C: only touch managedBy when explicitly provided, so
-    // existing update calls that don't send it never accidentally
-    // clear an existing hierarchy link.
-    if (managedBy !== undefined) update.managedBy = managedBy || null;
+    const { name, email, role, isActive, managedBy, password } = req.body;
+
+    // If a new password is provided, update via save() to trigger bcrypt pre-save hook.
+    // findByIdAndUpdate bypasses pre-save hooks and would store plaintext.
+    if (password && password.trim()) {
+      const userDoc = await User.findById(req.params.id);
+      if (!userDoc) return res.status(404).json({ message: 'User not found' });
+      userDoc.password = password.trim();
+      await userDoc.save();
+    }
+
+    // Restrict role changes to safe values — admin/director cannot be set via this endpoint
+    const ALLOWED_ROLES = ['tl', 'telecaller'];
+    if (role && !ALLOWED_ROLES.includes(role)) {
+      return res.status(400).json({ message: 'Role must be tl or telecaller' });
+    }
+
+    // Validate managedBy when provided: must point to an actual TL
+    if (managedBy) {
+      const manager = await User.findById(managedBy).select('role');
+      if (!manager || manager.role !== 'tl') {
+        return res.status(400).json({ message: 'managedBy must reference a Team Lead user' });
+      }
+    }
+
+    const update = {};
+    if (name  !== undefined) update.name  = name;
+    if (email !== undefined) update.email = email;
+    if (role  !== undefined) update.role  = role;
+    if (isActive !== undefined) update.isActive = isActive;
+    // Clear managedBy when role changes to tl (TLs have no direct manager in this direction)
+    if (role === 'tl') update.managedBy = null;
+    else if (managedBy !== undefined) update.managedBy = managedBy || null;
+
     const user = await User.findByIdAndUpdate(
       req.params.id,
       update,
