@@ -1,6 +1,6 @@
 const Lead         = require('../models/Lead');
 const XLSX         = require('xlsx');
-const { pickNextDirector } = require('../utils/allocationEngine');
+const { pickNextDirector, pickNextEmployee } = require('../utils/allocationEngine');
 const syncToSheets = require('../utils/syncToSheets');
 const { normalisePhone, normaliseForDedupe } = require('../utils/phoneUtils');
 const { regenerateDirectorView } = require('../utils/syncToSheets');
@@ -280,15 +280,33 @@ const createLead = async (req, res) => {
       if (leadData[k] === undefined) delete leadData[k];
     });
 
-    // K2: Employee (telecaller) creates lead for themselves — server enforces ownership
+    // K2: Employee (telecaller) creates lead for themselves — server enforces ownership.
+    // Phase 2 employee-selection must NOT overwrite this self-ownership.
     if (req.user.role === 'telecaller') {
       leadData.assignedTelecaller = req.user._id;
+    }
+
+    // S.2: client-supplied assignedTelecaller is ignored for non-admin, non-telecaller roles.
+    // Admin may still supply it for manual override. Telecaller self-ownership already set above.
+    if (req.user.role !== 'admin' && req.user.role !== 'telecaller') {
+      delete leadData.assignedTelecaller;
     }
 
     if (!leadData.assignedDirector) {
       try {
         const pick = await pickNextDirector();
-        if (pick) { leadData.assignedDirector = pick.directorId; leadData.status = 'Allocated'; }
+        if (pick) {
+          leadData.assignedDirector = pick.directorId;
+          leadData.status = 'Allocated';
+          // S.2 Phase 2: resolve Employee only for non-telecaller callers
+          // (telecaller-created leads are already self-owned above).
+          if (req.user.role !== 'telecaller' && !leadData.assignedTelecaller) {
+            try {
+              const empId = await pickNextEmployee(pick.directorId);
+              if (empId) leadData.assignedTelecaller = empId;
+            } catch (e) { console.warn('Phase 2 employee allocation skipped:', e.message); }
+          }
+        }
       } catch (e) { console.warn('Auto-allocation skipped:', e.message); }
     }
     const lead = await Lead.create(leadData);
@@ -625,7 +643,15 @@ const importCSV = async (req, res) => {
         // Adaptive Quota-Based Round Robin — one pick per row,
         // continuing the persisted cycleRemaining/currentPointer.
         const pick = await pickNextDirector();
-        if (pick) { raw.assignedDirector = pick.directorId; raw.status = 'Allocated'; }
+        if (pick) {
+          raw.assignedDirector = pick.directorId;
+          raw.status = 'Allocated';
+          // S.2 Phase 2: resolve Employee under this Director
+          try {
+            const empId = await pickNextEmployee(pick.directorId);
+            if (empId) raw.assignedTelecaller = empId;
+          } catch (_) {}
+        }
       } catch (_) {}
       // PHASE C: insertMany() below bypasses Lead.js's pre('save')
       // hook (that's what generates leadId for normal create/update),

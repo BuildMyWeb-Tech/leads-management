@@ -74,11 +74,21 @@ const updateUser = async (req, res) => {
       return res.status(400).json({ message: 'Role must be tl or telecaller' });
     }
 
-    // Validate managedBy when provided: must point to an actual TL
+    // Validate managedBy based on the target role:
+    //   - telecaller: managedBy must point to a TL
+    //   - tl:         managedBy must be null or point to a Director
+    //   - other roles not reachable here (blocked above)
+    const effectiveRole = role || (await User.findById(req.params.id).select('role').lean())?.role;
     if (managedBy) {
       const manager = await User.findById(managedBy).select('role');
-      if (!manager || manager.role !== 'tl') {
-        return res.status(400).json({ message: 'managedBy must reference a Team Lead user' });
+      if (effectiveRole === 'tl') {
+        if (!manager || manager.role !== 'director') {
+          return res.status(400).json({ message: 'A Team Lead\'s manager must be a Director' });
+        }
+      } else {
+        if (!manager || manager.role !== 'tl') {
+          return res.status(400).json({ message: 'managedBy must reference a Team Lead user' });
+        }
       }
     }
 
@@ -87,9 +97,11 @@ const updateUser = async (req, res) => {
     if (email !== undefined) update.email = email;
     if (role  !== undefined) update.role  = role;
     if (isActive !== undefined) update.isActive = isActive;
-    // Clear managedBy when role changes to tl (TLs have no direct manager in this direction)
-    if (role === 'tl') update.managedBy = null;
-    else if (managedBy !== undefined) update.managedBy = managedBy || null;
+    // managedBy semantics by role:
+    //   tl:         can be set to a Director ID (or null if unassigned)
+    //   telecaller: can be set to a TL ID (or null)
+    // We no longer auto-clear managedBy when role=tl — admins may set it via EditUserModal.
+    if (managedBy !== undefined) update.managedBy = managedBy || null;
 
     const user = await User.findByIdAndUpdate(
       req.params.id,

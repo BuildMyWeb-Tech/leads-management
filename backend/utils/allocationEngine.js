@@ -342,8 +342,119 @@ const previewSequence = (directors, startState = {}, count = 8) => {
   return sequence;
 };
 
+/**
+ * pickNextEmployee(directorId) — Phase 2 of hierarchical allocation.
+ *
+ * After AQRR picks a Director, this function resolves the assignment
+ * down to an eligible Employee:
+ *   1. Find all active TLs whose managedBy === directorId
+ *   2. Find all active telecallers whose managedBy ∈ those TL ids
+ *   3. Filter to those who have an attendance record for today (IST)
+ *   4. Select one using a deterministic round-robin:
+ *      sort candidates by _id (stable across calls) then pick the one
+ *      at index (totalLeadsAssigned % eligibleCount).  Since we do
+ *      not want to store per-employee counters, we approximate the
+ *      counter by counting how many leads have already been assigned
+ *      to each eligible employee today — the least-loaded employee
+ *      among eligible ones is chosen.  Ties broken by _id order.
+ *      This is stateless (no extra DB collection), attendance-gated,
+ *      and naturally distributes load across the workday as employees
+ *      receive leads.
+ * 5. Return the selected employee's _id, or null if no eligible
+ *    employee exists (zero-present / no hierarchy).
+ *
+ * This function NEVER touches AllocationConfig or Director AQRR state.
+ */
+const pickNextEmployee = async (directorId) => {
+  if (!directorId) return null;
+
+  const User       = require('../models/User');
+  const Attendance = require('../models/Attendance');
+  const Lead       = require('../models/Lead');
+  const { getISTDateString } = require('./dateHelper');
+
+  try {
+    // Step 1: TLs under this director
+    const tls = await User.find({
+      role:      'tl',
+      managedBy: directorId,
+      isActive:  true,
+    }).select('_id').lean();
+
+    if (!tls.length) return null;
+    const tlIds = tls.map((t) => t._id);
+
+    // Step 2: Active telecallers under those TLs
+    const candidates = await User.find({
+      role:      'telecaller',
+      managedBy: { $in: tlIds },
+      isActive:  true,
+    }).select('_id').lean();
+
+    if (!candidates.length) return null;
+    const candidateIds = candidates.map((c) => c._id);
+
+    // Step 3: Intersect with today's attendance (IST)
+    const todayIST = getISTDateString();
+    const presentRecords = await Attendance.find({
+      businessDate: todayIST,
+      employee:     { $in: candidateIds },
+    }).select('employee').lean();
+
+    if (!presentRecords.length) return null;
+    const presentIds = presentRecords.map((r) => String(r.employee));
+
+    const eligible = candidates
+      .filter((c) => presentIds.includes(String(c._id)))
+      // Sort by string _id for deterministic order independent of DB return order
+      .sort((a, b) => String(a._id).localeCompare(String(b._id)));
+
+    if (!eligible.length) return null;
+
+    // Step 4: Least-loaded selection — pick the eligible employee who
+    // has received the fewest leads today (among eligible ones).
+    // Counting today's assignedTelecaller on leads is lightweight for
+    // the expected team size (tens of employees, not millions).
+    const leadCounts = await Lead.aggregate([
+      {
+        $match: {
+          assignedTelecaller: { $in: eligible.map((e) => e._id) },
+          createdAt: {
+            $gte: (() => {
+              const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+              const istNow = new Date(Date.now() + IST_OFFSET_MS);
+              istNow.setUTCHours(0, 0, 0, 0);
+              return new Date(istNow.getTime() - IST_OFFSET_MS);
+            })(),
+          },
+        },
+      },
+      { $group: { _id: '$assignedTelecaller', count: { $sum: 1 } } },
+    ]);
+
+    const countMap = Object.fromEntries(
+      leadCounts.map((r) => [String(r._id), r.count])
+    );
+
+    // Sort eligible by ascending lead count, then ascending _id for ties
+    eligible.sort((a, b) => {
+      const diff = (countMap[String(a._id)] || 0) - (countMap[String(b._id)] || 0);
+      if (diff !== 0) return diff;
+      return String(a._id).localeCompare(String(b._id));
+    });
+
+    return eligible[0]._id;
+  } catch (err) {
+    // Non-fatal: if Phase 2 fails (e.g. DB blip), the lead still gets
+    // a Director via AQRR and manual assignment remains available.
+    console.warn('[pickNextEmployee] failed:', err.message);
+    return null;
+  }
+};
+
 module.exports = {
   pickNextDirector,
+  pickNextEmployee,
   previewSequence,
   getEnabledDirectors,
   // exported for tests

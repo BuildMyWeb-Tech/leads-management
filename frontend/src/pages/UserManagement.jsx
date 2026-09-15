@@ -31,8 +31,9 @@ export default function UserManagement() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
 
-  const [users, setUsers] = useState([]);
-  const [tls, setTls]     = useState([]);
+  const [users, setUsers]         = useState([]);
+  const [tls, setTls]             = useState([]);
+  const [directors, setDirectors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]   = useState(null); // 'tl' | 'employee' | null
   const [togglingId, setTogglingId] = useState(null);
@@ -61,10 +62,21 @@ export default function UserManagement() {
     }
   }, [isAdmin]);
 
+  const loadDirectors = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const { data } = await api.get('/users?role=director');
+      setDirectors(data);
+    } catch {
+      // non-fatal
+    }
+  }, [isAdmin]);
+
   useEffect(() => {
     loadUsers();
     loadTLs();
-  }, [loadUsers, loadTLs]);
+    loadDirectors();
+  }, [loadUsers, loadTLs, loadDirectors]);
 
   const handleCreated = (newUser) => {
     setUsers((prev) => [newUser, ...prev]);
@@ -292,6 +304,7 @@ export default function UserManagement() {
         <EditUserModal
           user={editTarget}
           tls={tls}
+          directors={directors}
           onClose={() => setEditTarget(null)}
           onUpdated={(updated) => { handleUpdated(updated); setEditTarget(null); }}
         />

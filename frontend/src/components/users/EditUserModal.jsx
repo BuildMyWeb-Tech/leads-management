@@ -16,7 +16,7 @@ const ROLE_OPTIONS = [
  *   onClose   — callback to close the modal
  *   onUpdated — callback(updatedUser) called on success
  */
-export default function EditUserModal({ user: target, onClose, onUpdated, tls = [] }) {
+export default function EditUserModal({ user: target, onClose, onUpdated, tls = [], directors = [] }) {
   const [form, setForm] = useState({
     name:      target.name  || '',
     email:     target.email || '',
@@ -39,7 +39,15 @@ export default function EditUserModal({ user: target, onClose, onUpdated, tls = 
     setShowPass(false);
   }, [target._id]);
 
-  const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
+  const set = (field) => (e) => {
+    const value = e.target.value;
+    if (field === 'role') {
+      // Clear managedBy when role changes so the previous selection doesn't leak
+      setForm({ ...form, role: value, managedBy: '' });
+    } else {
+      setForm({ ...form, [field]: value });
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -54,8 +62,8 @@ export default function EditUserModal({ user: target, onClose, onUpdated, tls = 
         email: form.email.trim(),
         role:  form.role,
       };
-      // Only send managedBy if role is telecaller
-      if (form.role === 'telecaller') {
+      // Send managedBy for telecaller (→ TL) and tl (→ Director)
+      if (form.role === 'telecaller' || form.role === 'tl') {
         payload.managedBy = form.managedBy || null;
       }
       // Only send password if a new one was entered
@@ -108,6 +116,18 @@ export default function EditUserModal({ user: target, onClose, onUpdated, tls = 
               ))}
             </select>
           </div>
+
+          {form.role === 'tl' && (
+            <div>
+              <label className="label">Assign to Director</label>
+              <select className="input" value={form.managedBy} onChange={set('managedBy')}>
+                <option value="">— Unassigned —</option>
+                {directors.map((d) => (
+                  <option key={d._id} value={d._id}>{d.name} ({d.email})</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {form.role === 'telecaller' && (
             <div>

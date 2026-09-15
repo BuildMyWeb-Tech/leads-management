@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useAuth } from './context/AuthContext';
 
 import Sidebar                      from './components/layout/Sidebar';
+import TopBar                       from './components/layout/TopBar';
 import Login                        from './pages/Login';
 import Dashboard                    from './pages/Dashboard';
 import Leads                        from './pages/Leads';
@@ -60,37 +61,7 @@ function ProtectedRoute({ children, allowedRoles }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         {/* ── Mobile sticky header (hidden on lg+) ─────────── */}
-        <header className="lg:hidden flex-shrink-0 h-14 bg-white border-b border-gray-200
-                           flex items-center justify-between px-4 z-30 relative">
-          {/* Hamburger */}
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="w-10 h-10 flex items-center justify-center rounded-lg
-                       text-gray-600 hover:bg-gray-100 active:bg-gray-200
-                       transition-colors"
-            aria-label="Open menu"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-
-          {/* Brand */}
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-blue-600 rounded-md flex items-center justify-center">
-              <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-            <span className="text-sm font-bold text-gray-900">VVMS CRM</span>
-          </div>
-
-          {/* Right spacer — keeps brand centered */}
-          <div className="w-10" />
-        </header>
+        <TopBar onMenuOpen={() => setSidebarOpen(true)} />
 
         {/* ── Page content ─────────────────────────────────── */}
         {/* pt-0 on desktop (no header), content fills full height */}

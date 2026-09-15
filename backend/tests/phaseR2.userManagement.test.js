@@ -83,12 +83,18 @@ test('R2-UM-05: updateUser allows role tl and telecaller in ALLOWED_ROLES', () =
   assert.ok(!ALLOWED_ROLES.includes('director'), 'director must NOT be in allowed roles');
 });
 
-// ── R2-UM-06: managedBy cleared when role changes to tl ──────────
-test('R2-UM-06: usersController source confirms managedBy cleared on role=tl', () => {
+// ── R2-UM-06: managedBy NOT auto-cleared for TL role (S.2 update) ──
+// S.2 removed the auto-clear so admins can set TL.managedBy = Director._id.
+// Instead, the code validates that when managedBy is supplied for a TL
+// it must point to a director — the explicit validation replaces the
+// old blind clear.
+test('R2-UM-06: usersController does NOT auto-clear managedBy when role changes to tl (S.2)', () => {
   const fs = require('node:fs');
   const src = fs.readFileSync(require.resolve('../controllers/usersController'), 'utf8');
-  assert.ok(src.includes("role === 'tl'") && src.includes('update.managedBy = null'),
-    'managedBy must be cleared when role changes to tl');
+  assert.ok(!src.includes("if (role === 'tl') update.managedBy = null"),
+    'S.2: managedBy must NOT be auto-cleared for tl role — TL can be linked to a director');
+  assert.ok(src.includes("manager.role !== 'director'"),
+    'S.2: updateUser must validate that TL managedBy points to a director');
 });
 
 // ── R2-UM-07: password change requires user.save() ────────────────
