@@ -51,6 +51,8 @@ const auditLogSchema = new mongoose.Schema(
         'allocation_config_changed',
         'sheets_synced',
         'ocr_import',
+        // Attendance
+        'attendance_marked',
       ],
       index: true,
     },

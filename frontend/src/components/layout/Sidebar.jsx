@@ -123,7 +123,7 @@ const ROLE_BADGE = {
 };
 // K2: 'telecaller' DB value remains; only the UI label changes to 'Employee'
 const ROLE_LABEL  = { admin: 'Admin', director: 'Director', tl: 'Team Lead', telecaller: 'Employee' };
-const ADMIN_ONLY  = ['Import CSV', 'Allocation Engine', 'Sheets Sync', 'Audit Logs'];
+const ADMIN_ONLY  = ['Import CSV', 'Allocation Engine', 'Audit Logs'];
 
 /**
  * Sidebar

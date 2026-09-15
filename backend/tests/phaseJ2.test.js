@@ -556,10 +556,10 @@ test('J2-007-3: SheetSync comment does not mention Status as a Director_View col
   );
 });
 
-test('J2-007-4: health endpoint returns Phase I.2 (not G.2)', () => {
+test('J2-007-4: health endpoint returns current phase (Q2-003: updated from I.2 to Phase Q)', () => {
   assert.ok(
-    serverSrc.includes("Phase I.2"),
-    'health endpoint must say Phase I.2',
+    serverSrc.includes("Phase Q"),
+    'health endpoint must say Phase Q (updated in Q2-003)',
   );
   assert.ok(
     !serverSrc.includes("Phase G.2"),

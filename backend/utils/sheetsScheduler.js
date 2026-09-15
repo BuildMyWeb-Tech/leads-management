@@ -9,14 +9,12 @@
 const AppState  = require('../models/AppState');
 const Lead      = require('../models/Lead');
 const SheetSync = require('../models/SheetSync');
+// Q2-006: import canonical IST helper from dateHelper instead of re-declaring
+const { getISTMonthString } = require('./dateHelper');
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
-const getISTMonthString = (now = new Date()) => {
-  const istNow = new Date(now.getTime() + IST_OFFSET_MS);
-  return istNow.toISOString().slice(0, 7); // 'YYYY-MM'
-};
-
+// getISTDayOfMonth and isPast9amIST are scheduler-specific (not in dateHelper)
 const getISTDayOfMonth = (now = new Date()) => {
   const istNow = new Date(now.getTime() + IST_OFFSET_MS);
   return istNow.getUTCDate();
@@ -100,14 +98,13 @@ const runMonthlySync = async () => {
 
     console.log(`[SheetsScheduler] Monthly sync complete: ${result.count} leads synced`);
   } catch (err) {
-    // Non-fatal — log and continue
+    // Q2-002 FIX: do NOT mark the month as synced on failure.
+    // The previous code marked lastMonthlySheetsSync = currentMonth even
+    // after a failed sync, preventing any retry for the rest of the month.
+    // Now we log the error and leave the month unmarked so the startup
+    // missed-run check (startSheetsScheduler) can retry on next restart,
+    // or the next scheduler tick on the following month's 1st will re-evaluate.
     console.error('[SheetsScheduler] Monthly sync failed:', err.message);
-    // Still record the attempt to avoid infinite retry loops this month
-    try {
-      const state = await AppState.getOrCreate();
-      state.lastMonthlySheetsSync = currentMonth;
-      await state.save();
-    } catch (_) {}
   }
 };
 

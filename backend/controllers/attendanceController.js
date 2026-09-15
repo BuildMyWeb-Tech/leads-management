@@ -1,6 +1,7 @@
 const Attendance = require('../models/Attendance');
 const User       = require('../models/User');
 const { getISTDateString } = require('../utils/dateHelper');
+const audit      = require('../utils/auditService');
 
 // POST /api/attendance/mark-present
 // telecaller only — marks the calling employee present for today (IST)
@@ -29,6 +30,12 @@ const markPresent = async (req, res) => {
     }
 
     if (created) {
+      // Q2-007: audit first-time attendance mark only — not on repeat or concurrent
+      audit.log(req, 'attendance_marked',
+        { type: 'user', _id: req.user._id, name: req.user.name },
+        { before: null, after: { businessDate: todayIST, markedAt: doc?.markedAt } },
+        `${req.user.name} marked attendance for ${todayIST}`
+      );
       return res.status(201).json({ attendance: doc, alreadyMarked: false });
     }
     return res.status(200).json({ attendance: doc, alreadyMarked: true });

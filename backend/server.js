@@ -24,10 +24,14 @@ const app = express();
 app.use(helmet({ contentSecurityPolicy: false }));
 
 // ── CORS — restrict to configured frontend origin ──────────────
-// Set FRONTEND_URL in .env (e.g. https://your-crm.example.com).
-// In development, defaults to localhost:5173. Multiple origins can
-// be space-separated: "https://app.example.com http://localhost:5173"
-const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173', 'https://leads-management-peach.vercel.app')
+// Set FRONTEND_URL in .env to override defaults (space-separated
+// for multiple origins, e.g. "https://app.example.com http://localhost:5173").
+// Q2-001 FIX: previous code used JavaScript comma operator which made
+// FRONTEND_URL a dead variable — only the hardcoded Vercel URL was ever used.
+const allowedOrigins = (
+  process.env.FRONTEND_URL ||
+  'http://localhost:5173 https://leads-management-peach.vercel.app'
+)
   .split(' ')
   .map((o) => o.trim())
   .filter(Boolean);
@@ -87,7 +91,7 @@ app.use('/api/push',       require('./routes/push'));
 app.use('/api/audit',      require('./routes/audit'));
 
 app.get('/api/health', (_req, res) =>
-  res.json({ status: 'OK', message: 'Lead Management API — Phase I.2' })
+  res.json({ status: 'OK', message: 'Lead Management API — Phase Q' })
 );
 
 // ── Global error handler — no stack traces in production ───────

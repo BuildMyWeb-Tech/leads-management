@@ -15,15 +15,10 @@
 const { notify }  = require('./pushService');
 const Lead        = require('../models/Lead');
 const AppState    = require('../models/AppState');
+// Q2-006: import canonical IST helper from dateHelper instead of re-declaring
+const { getISTDateString: getTodayISTString } = require('./dateHelper');
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // UTC+5:30
-
-// Return today's date string 'YYYY-MM-DD' in IST
-const getTodayISTString = () => {
-  const now    = new Date();
-  const istNow = new Date(now.getTime() + IST_OFFSET_MS);
-  return istNow.toISOString().slice(0, 10);
-};
 
 // Get today's follow-up date range in IST (midnight-to-midnight).
 // Accepts an optional `now` for deterministic testing.

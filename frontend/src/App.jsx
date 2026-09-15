@@ -13,7 +13,6 @@ import AllocationConfig             from './pages/AllocationConfig';
 import DirectorDashboard            from './pages/DirectorDashboard';
 import TelecallerPanel              from './pages/TelecallerPanel';
 import OcrCapture                   from './pages/OcrCapture';
-import SheetsSync                   from './pages/SheetsSync';
 import NotificationSettings         from './pages/NotificationSettings';
 import AuditLogs                    from './pages/AuditLogs';
 import UserManagement               from './pages/UserManagement';
