@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getUsers, createUser, updateUser } = require('../controllers/usersController');
+const { getUsers, createUser, updateUser, deleteUser } = require('../controllers/usersController');
 const { protect, authorize } = require('../middleware/auth');
 
 router.use(protect);
@@ -13,5 +13,8 @@ router.post('/', authorize('admin', 'tl'), createUser);
 
 // PUT /api/users/:id — Admin only
 router.put('/:id', authorize('admin'), updateUser);
+
+// DELETE /api/users/:id — Admin only (soft delete: sets isActive=false)
+router.delete('/:id', authorize('admin'), deleteUser);
 
 module.exports = router;

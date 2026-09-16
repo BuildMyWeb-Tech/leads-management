@@ -4,7 +4,7 @@ const audit = require('../utils/auditService');   // PHASE 10
 const getUsers = async (req, res) => {
   try {
     const { role } = req.query;
-    const filter = {};
+    const filter = { isActive: { $ne: false } }; // hide soft-deleted users
     if (role) filter.role = role;
     if (req.user.role === 'director') filter.role = 'telecaller';
     // K2: TL sees only employees managed by themselves
@@ -33,16 +33,29 @@ const createUser = async (req, res) => {
 
     const resolvedRole = (req.user.role === 'tl') ? 'telecaller' : (role || 'telecaller');
 
-    // K2: Validate managedBy when provided — must point to an actual TL
+    // Validate managedBy: role-aware.
+    //   TL caller  → auto-set to self (TL owns their employees)
+    //   Admin creating TL       → managedBy must be a Director (or omitted)
+    //   Admin creating telecaller → managedBy must be a TL (or omitted)
     let resolvedManagedBy = managedBy || null;
     if (req.user.role === 'tl') {
       // TL always owns their created employees
       resolvedManagedBy = req.user._id;
     } else if (resolvedManagedBy) {
-      // Admin: validate the specified manager is a TL
       const manager = await User.findById(resolvedManagedBy).select('role');
-      if (!manager || manager.role !== 'tl') {
-        return res.status(400).json({ message: 'managedBy must reference a Team Lead user' });
+      if (!manager) {
+        return res.status(400).json({ message: 'managedBy user not found' });
+      }
+      if (resolvedRole === 'tl') {
+        // Creating a TL: their manager must be a Director
+        if (manager.role !== 'director') {
+          return res.status(400).json({ message: 'A Team Lead\'s manager must be a Director' });
+        }
+      } else {
+        // Creating a telecaller: their manager must be a TL
+        if (manager.role !== 'tl') {
+          return res.status(400).json({ message: 'managedBy must reference a Team Lead user' });
+        }
       }
     }
 
@@ -119,4 +132,26 @@ const updateUser = async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
-module.exports = { getUsers, createUser, updateUser };
+// S.3: Delete user — soft-delete only (isActive=false) to preserve data integrity.
+// Hard deletion is not safe: Leads, Attendance, AuditLogs, and AllocationConfig
+// all reference User _ids. Setting isActive=false hides the user from all active
+// lists while keeping historical data intact.
+// Guard: admin cannot delete themselves (would lock out the system).
+const deleteUser = async (req, res) => {
+  try {
+    if (req.params.id === req.user._id.toString()) {
+      return res.status(400).json({ message: 'You cannot delete your own account' });
+    }
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.role === 'admin') {
+      return res.status(403).json({ message: 'Admin accounts cannot be deleted' });
+    }
+    user.isActive = false;
+    await user.save();
+    res.json({ message: `${user.name} has been deleted` });
+    audit.userDeactivated(req, user);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+};
+
+module.exports = { getUsers, createUser, updateUser, deleteUser };

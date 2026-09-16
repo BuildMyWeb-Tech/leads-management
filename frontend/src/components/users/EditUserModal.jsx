@@ -84,9 +84,10 @@ export default function EditUserModal({ user: target, onClose, onUpdated, tls = 
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-40 backdrop-blur-[1px]" onClick={onClose} />
-      <div className="fixed z-50 inset-x-4 top-1/2 -translate-y-1/2
-                      sm:inset-auto sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:top-1/2
-                      bg-white rounded-2xl shadow-xl max-w-sm w-full mx-auto p-6">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm pointer-events-auto
+                      max-h-[calc(100vh-2rem)] overflow-y-auto">
+      <div className="p-6">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-base font-semibold text-gray-900">Edit User</h3>
           <button
@@ -193,6 +194,8 @@ export default function EditUserModal({ user: target, onClose, onUpdated, tls = 
             <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
           </div>
         </form>
+      </div>
+      </div>
       </div>
     </>
   );

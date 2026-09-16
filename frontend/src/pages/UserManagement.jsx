@@ -35,10 +35,10 @@ export default function UserManagement() {
   const [tls, setTls]             = useState([]);
   const [directors, setDirectors] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal]   = useState(null); // 'tl' | 'employee' | null
-  const [togglingId, setTogglingId] = useState(null);
-  const [editTarget, setEditTarget] = useState(null); // user object to edit
-  const [confirmDeactivate, setConfirmDeactivate] = useState(null); // user to deactivate/activate
+  const [modal, setModal]       = useState(null);  // 'tl' | 'employee' | null
+  const [editTarget, setEditTarget]   = useState(null);  // user to edit
+  const [confirmDelete, setConfirmDelete] = useState(null); // user to delete
+  const [deletingId, setDeletingId]   = useState(null);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -85,17 +85,18 @@ export default function UserManagement() {
     }
   };
 
-  const toggleActive = async (u) => {
-    setConfirmDeactivate(null);
-    setTogglingId(u._id);
+  const handleDelete = async (u) => {
+    setConfirmDelete(null);
+    setDeletingId(u._id);
     try {
-      const { data } = await api.put(`/users/${u._id}`, { isActive: !u.isActive });
-      setUsers((prev) => prev.map((x) => x._id === u._id ? data : x));
-      toast.success(`${data.name} ${data.isActive ? 'activated' : 'deactivated'}`);
+      await api.delete(`/users/${u._id}`);
+      setUsers((prev) => prev.filter((x) => x._id !== u._id));
+      setTls((prev) => prev.filter((x) => x._id !== u._id));
+      toast.success(`${u.name} has been deleted`);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to update user');
+      toast.error(err.response?.data?.message || 'Failed to delete user');
     } finally {
-      setTogglingId(null);
+      setDeletingId(null);
     }
   };
 
@@ -171,7 +172,8 @@ export default function UserManagement() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {visibleUsers.map((u) => {
-                  const manager = u.managedBy ? tls.find((t) => t._id === u.managedBy || t._id === u.managedBy?._id) : null;
+                  const managedById = u.managedBy?._id ? String(u.managedBy._id) : String(u.managedBy || '');
+                  const manager = managedById ? tls.find((t) => String(t._id) === managedById) : null;
                   return (
                     <tr key={u._id} className={`hover:bg-gray-50 transition-colors ${!u.isActive ? 'opacity-50' : ''}`}>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{u.name}</td>
@@ -203,29 +205,19 @@ export default function UserManagement() {
                                      m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                               </svg>
                             </button>
-                            {/* Deactivate / Activate icon */}
+                            {/* Delete icon */}
                             <button
-                              onClick={() => setConfirmDeactivate(u)}
-                              disabled={togglingId === u._id}
-                              title={u.isActive ? 'Deactivate user' : 'Activate user'}
-                              className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors disabled:opacity-40
-                                ${u.isActive
-                                  ? 'text-gray-400 hover:text-red-600 hover:bg-red-50'
-                                  : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
-                                }`}
+                              onClick={() => setConfirmDelete(u)}
+                              disabled={deletingId === u._id}
+                              title="Delete user"
+                              className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
                             >
-                              {togglingId === u._id ? (
+                              {deletingId === u._id ? (
                                 <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                              ) : u.isActive ? (
-                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                    d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636
-                                       m12.728 12.728L5.636 5.636" />
-                                </svg>
                               ) : (
                                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>
                               )}
                             </button>
@@ -242,7 +234,8 @@ export default function UserManagement() {
           {/* Mobile cards */}
           <div className="sm:hidden divide-y divide-gray-100">
             {visibleUsers.map((u) => {
-              const manager = u.managedBy ? tls.find((t) => t._id === u.managedBy || t._id === u.managedBy?._id) : null;
+              const managedById = u.managedBy?._id ? String(u.managedBy._id) : String(u.managedBy || '');
+              const manager = managedById ? tls.find((t) => String(t._id) === managedById) : null;
               return (
                 <div key={u._id} className={`px-4 py-3 ${!u.isActive ? 'opacity-50' : ''}`}>
                   <div className="flex items-center justify-between gap-2">
@@ -275,12 +268,15 @@ export default function UserManagement() {
                         Edit
                       </button>
                       <button
-                        onClick={() => setConfirmDeactivate(u)}
-                        disabled={togglingId === u._id}
-                        className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-40
-                          ${u.isActive ? 'text-gray-500 hover:text-red-600' : 'text-gray-500 hover:text-green-600'}`}
+                        onClick={() => setConfirmDelete(u)}
+                        disabled={deletingId === u._id}
+                        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-red-600 transition-colors disabled:opacity-40"
                       >
-                        {u.isActive ? 'Deactivate' : 'Activate'}
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Delete
                       </button>
                     </div>
                   )}
@@ -295,6 +291,7 @@ export default function UserManagement() {
         <CreateUserModal
           type={modal}
           tls={tls}
+          directors={directors}
           onClose={() => setModal(null)}
           onCreated={handleCreated}
         />
@@ -310,41 +307,29 @@ export default function UserManagement() {
         />
       )}
 
-      {/* Deactivate / Activate confirmation dialog */}
-      {confirmDeactivate && (
+      {/* Delete confirmation dialog */}
+      {confirmDelete && (
         <>
           <div className="fixed inset-0 bg-black/40 z-40 backdrop-blur-[1px]"
-            onClick={() => setConfirmDeactivate(null)} />
-          <div className="fixed z-50 inset-x-4 top-1/2 -translate-y-1/2
-                          sm:inset-auto sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:top-1/2
-                          bg-white rounded-2xl shadow-xl max-w-sm w-full mx-auto p-6">
-            <h3 className="text-base font-semibold text-gray-900 mb-2">
-              {confirmDeactivate.isActive ? 'Deactivate User' : 'Activate User'}
-            </h3>
-            <p className="text-sm text-gray-600 mb-5">
-              {confirmDeactivate.isActive
-                ? <>Are you sure you want to deactivate <strong>{confirmDeactivate.name}</strong>?
-                   They will immediately lose access to the system. Historical data is preserved.</>
-                : <>Reactivate <strong>{confirmDeactivate.name}</strong>? They will regain access to the system.</>
-              }
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => toggleActive(confirmDeactivate)}
-                className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors
-                  ${confirmDeactivate.isActive
-                    ? 'bg-red-600 hover:bg-red-700 text-white'
-                    : 'bg-green-600 hover:bg-green-700 text-white'
-                  }`}
-              >
-                {confirmDeactivate.isActive ? 'Deactivate' : 'Activate'}
-              </button>
-              <button
-                onClick={() => setConfirmDeactivate(null)}
-                className="btn-ghost"
-              >
-                Cancel
-              </button>
+            onClick={() => setConfirmDelete(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm pointer-events-auto p-6">
+              <h3 className="text-base font-semibold text-gray-900 mb-2">Delete User</h3>
+              <p className="text-sm text-gray-600 mb-5">
+                Are you sure you want to delete <strong>{confirmDelete.name}</strong>?
+                This action cannot be undone. Their leads and attendance history will be preserved.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleDelete(confirmDelete)}
+                  className="flex-1 py-2 px-4 rounded-lg text-sm font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
+                >
+                  Delete
+                </button>
+                <button onClick={() => setConfirmDelete(null)} className="btn-ghost">
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </>

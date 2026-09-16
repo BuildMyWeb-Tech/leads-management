@@ -1,5 +1,4 @@
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 
 /**
  * TopBar — mobile-only sticky header (hidden on lg+).
@@ -8,11 +7,9 @@ import { useAuth } from '../../context/AuthContext';
  *   onMenuOpen — callback to open the sidebar drawer
  */
 export default function TopBar({ onMenuOpen }) {
-  const { user } = useAuth();
   const navigate = useNavigate();
 
-  const canAddLead = user?.role !== 'telecaller';
-
+  // All roles can add leads
   return (
     <header className="lg:hidden flex-shrink-0 h-14 bg-white border-b border-gray-200
                        flex items-center justify-between px-4 z-30 relative">
@@ -42,22 +39,20 @@ export default function TopBar({ onMenuOpen }) {
         <span className="text-sm font-bold text-gray-900">VVMS CRM</span>
       </div>
 
-      {/* Right side: notification bell + add lead (non-telecaller only) */}
+      {/* Right side: notification bell + add lead (all roles) */}
       <div className="flex items-center gap-1">
-        {canAddLead && (
-          <button
-            onClick={() => navigate('/add-lead')}
-            className="w-9 h-9 flex items-center justify-center rounded-lg
-                       text-blue-600 hover:bg-blue-50 active:bg-blue-100
-                       transition-colors"
-            aria-label="Add lead"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
-        )}
+        <button
+          onClick={() => navigate('/add-lead')}
+          className="w-9 h-9 flex items-center justify-center rounded-lg
+                     text-blue-600 hover:bg-blue-50 active:bg-blue-100
+                     transition-colors"
+          aria-label="Add lead"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
         <button
           onClick={() => navigate('/notification-settings')}
           className="w-9 h-9 flex items-center justify-center rounded-lg
