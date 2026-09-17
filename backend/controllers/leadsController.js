@@ -430,6 +430,12 @@ const updateLead = async (req, res) => {
       if (req.body.notes        !== undefined) lead.notes        = req.body.notes;
       if (req.body.remarks      !== undefined) lead.remarks      = req.body.remarks;
       if (req.body.followUpDate !== undefined) lead.followUpDate = req.body.followUpDate || null;
+      if (req.body.priority !== undefined) {
+        if (!['Hot', 'Warm', 'Cold'].includes(req.body.priority)) {
+          return res.status(400).json({ message: 'Invalid priority value' });
+        }
+        lead.priority = req.body.priority;
+      }
 
       if (req.body.status !== undefined || req.body.notes !== undefined) {
         recordCallHistoryEntry(lead, { status: lead.status, notes: req.body.notes || lead.notes || '', updatedBy: req.user._id });
@@ -706,11 +712,12 @@ const getDashboardStats = async (req, res) => {
     // correct 'tl' scoping; admin/director/telecaller unchanged.
     const filter = await buildLeadVisibilityFilter(req.user);
     const now = new Date();
-    const [totalLeads, statusStats, sourceStats, recentLeads, directorStats, priorityStats, overdueCount, todayCount] = await Promise.all([
+    const [totalLeads, statusStats, sourceStats, hotLeads, warmLeads, directorStats, priorityStats, overdueCount, todayCount] = await Promise.all([
       Lead.countDocuments(filter),
       Lead.aggregate([{ $match: filter }, { $group: { _id: '$status', count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
       Lead.aggregate([{ $match: filter }, { $group: { _id: '$source',  count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
-      Lead.find(filter).sort({ createdAt: -1 }).limit(5).populate('assignedDirector','name').populate('assignedTelecaller','name'),
+      Lead.find({ ...filter, priority: 'Hot' }).sort({ createdAt: -1 }).limit(8).populate('assignedTelecaller', 'name').lean(),
+      Lead.find({ ...filter, priority: 'Warm' }).sort({ createdAt: -1 }).limit(8).populate('assignedTelecaller', 'name').lean(),
       req.user.role === 'admin'
         ? Lead.aggregate([
             { $match: { assignedDirector: { $ne: null } } },
@@ -737,7 +744,7 @@ const getDashboardStats = async (req, res) => {
     const unassigned = await Lead.countDocuments({ ...filter, assignedDirector: null });
     const priorityBreakdown = Object.fromEntries(priorityStats.map((p) => [p._id, p.count]));
     res.json({
-      totalLeads, unassigned, statusStats, sourceStats, directorStats, recentLeads,
+      totalLeads, unassigned, statusStats, sourceStats, directorStats, hotLeads, warmLeads,
       // G.2 additions
       priorityBreakdown: {
         hot:  priorityBreakdown['Hot']  || 0,

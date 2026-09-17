@@ -201,8 +201,8 @@ export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
         {/* Priority + pipeline strip */}
         <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex-shrink-0 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
-            {/* K2: editable priority select for admin/director/tl; display-only badge for employee */}
-            {canEditProfile ? (
+            {/* Priority: editable for admin/director/tl and telecaller (own leads only — backend enforces ownership) */}
+            {(canEditProfile || user.role === 'telecaller') ? (
               <div className="flex items-center gap-2">
                 <label className="text-xs text-gray-500 font-medium">Priority:</label>
                 <select

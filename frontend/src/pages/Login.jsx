@@ -7,10 +7,11 @@ export default function Login() {
   const [form, setForm]       = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const [error, setError]     = useState('');
   const { login }   = useAuth();
   const navigate    = useNavigate();
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) => { setForm({ ...form, [e.target.name]: e.target.value }); setError(''); };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -20,7 +21,9 @@ export default function Login() {
       toast.success('Welcome back!');
       navigate('/dashboard');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Invalid email or password.');
+      const msg = err.response?.data?.message || 'Invalid email or password.';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -160,6 +163,18 @@ export default function Login() {
                 </button>
               </div>
             </div>
+
+            {/* Inline error */}
+            {error && (
+              <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2.5
+                             text-sm text-red-700 flex items-center gap-2">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                {error}
+              </div>
+            )}
 
             {/* Submit */}
             <button

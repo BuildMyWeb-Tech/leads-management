@@ -96,6 +96,7 @@ function KanbanCard({ lead, index, canDrag, onClick }) {
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
+          style={{ ...provided.draggableProps.style, touchAction: 'none' }}
           className={snapshot.isDragging ? 'opacity-75 rotate-1' : ''}
         >
           {card}
@@ -107,7 +108,7 @@ function KanbanCard({ lead, index, canDrag, onClick }) {
 
 export default function KanbanBoard({ leads, onPriorityChange, onCardClick }) {
   const { user } = useAuth();
-  const canDrag = ['admin', 'director', 'tl'].includes(user?.role);
+  const canDrag = ['admin', 'director', 'tl', 'telecaller'].includes(user?.role);
 
   // columns: { HOT: [leads], WARM: [leads], HOLD: [leads] }
   const [columns, setColumns] = useState({ HOT: [], WARM: [], HOLD: [] });
@@ -164,11 +165,6 @@ export default function KanbanBoard({ leads, onPriorityChange, onCardClick }) {
 
   return (
     <div className="w-full overflow-x-auto pb-4">
-      {!canDrag && (
-        <p className="text-xs text-gray-400 mb-3 text-center">
-          View only — contact your Team Lead to change priority.
-        </p>
-      )}
       <DragDropContext onDragEnd={canDrag ? onDragEnd : () => {}}>
         <div className="flex gap-4 min-w-[680px]">
           {COLUMNS.map((colKey) => {

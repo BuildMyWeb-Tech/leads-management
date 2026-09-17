@@ -16,7 +16,23 @@ if (missingEnv.length) {
   process.exit(1);
 }
 
-connectDB();
+connectDB().then(async () => {
+  // One-time migration: set isActive=true on legacy user documents that lack the field.
+  // The business rule is isActive===true → active; absent field is NOT active.
+  // Legacy documents predate the isActive field and were active by intent.
+  const User = require('./models/User');
+  try {
+    const result = await User.updateMany(
+      { isActive: { $exists: false } },
+      { $set: { isActive: true } }
+    );
+    if (result.modifiedCount > 0) {
+      console.log(`[startup] Migrated ${result.modifiedCount} legacy user document(s): set isActive=true`);
+    }
+  } catch (migErr) {
+    console.error('[startup] isActive migration error:', migErr.message);
+  }
+}).catch(() => {});
 
 const app = express();
 

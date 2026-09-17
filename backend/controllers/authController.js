@@ -23,16 +23,16 @@ const login = async (req, res) => {
       user: { _id: user._id, name: user.name, email: user.email, role: user.role, managedBy: user.managedBy },
     });
     audit.userLogin(req, user);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+  } catch {
+    res.status(500).json({ message: 'Something went wrong. Please try again.' });
   }
 };
 
 const getMe = async (req, res) => {
   try {
     res.json(req.user);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+  } catch {
+    res.status(500).json({ message: 'Something went wrong. Please try again.' });
   }
 };
 

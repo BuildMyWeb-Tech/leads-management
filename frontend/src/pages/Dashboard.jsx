@@ -261,6 +261,77 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ── HOT & WARM Leads ─────────────────────────────── */}
+      {((stats?.hotLeads || []).length > 0 || (stats?.warmLeads || []).length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+
+          {/* HOT LEADS */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-800">🔥 Hot Leads</h3>
+              <Link to="/leads?priority=Hot" className="text-xs text-blue-600 hover:underline">View all →</Link>
+            </div>
+            {(stats?.hotLeads || []).length === 0 ? (
+              <p className="text-xs text-gray-400 py-3 text-center">No hot leads</p>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {stats.hotLeads.map((lead) => (
+                  <div key={lead._id} className="flex items-center justify-between py-2 gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{lead.name}</p>
+                      <p className="text-xs text-gray-400">{lead.phone}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full
+                        text-xs font-medium ring-1 ring-inset
+                        ${STATUS_BADGE_CLASSES[lead.status] || 'bg-gray-100 text-gray-500 ring-gray-200'}`}>
+                        {lead.status}
+                      </span>
+                      {lead.assignedTelecaller?.name && (
+                        <span className="text-xs text-gray-500 hidden sm:block">{lead.assignedTelecaller.name}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* WARM LEADS */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-800">🌡️ Warm Leads</h3>
+              <Link to="/leads?priority=Warm" className="text-xs text-blue-600 hover:underline">View all →</Link>
+            </div>
+            {(stats?.warmLeads || []).length === 0 ? (
+              <p className="text-xs text-gray-400 py-3 text-center">No warm leads</p>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {stats.warmLeads.map((lead) => (
+                  <div key={lead._id} className="flex items-center justify-between py-2 gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{lead.name}</p>
+                      <p className="text-xs text-gray-400">{lead.phone}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full
+                        text-xs font-medium ring-1 ring-inset
+                        ${STATUS_BADGE_CLASSES[lead.status] || 'bg-gray-100 text-gray-500 ring-gray-200'}`}>
+                        {lead.status}
+                      </span>
+                      {lead.assignedTelecaller?.name && (
+                        <span className="text-xs text-gray-500 hidden sm:block">{lead.assignedTelecaller.name}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
       {/* ── Main grid — stacks on mobile ─────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
@@ -390,39 +461,6 @@ export default function Dashboard() {
         </div>
       )} */}
 
-      {/* ── Recent leads ─────────────────────────────────── */}
-      {(stats?.recentLeads || []).length > 0 && (
-        <div className="card mt-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-800">Recent leads</h3>
-            <Link to="/leads" className="text-xs text-blue-600 hover:underline">View all →</Link>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {stats.recentLeads.map((lead) => (
-              <div key={lead._id}
-                className="flex items-center justify-between py-2.5 gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{lead.name}</p>
-                  <p className="text-xs text-gray-400">{lead.phone}</p>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-xs text-gray-400 hidden sm:block">{lead.source}</span>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full
-                    text-xs font-medium ring-1 ring-inset
-                    ${STATUS_BADGE_CLASSES[lead.status] || ''}`}>
-                    {lead.status}
-                  </span>
-                  {lead.assignedDirector && (
-                    <span className="text-xs text-gray-500 hidden md:block">
-                      {lead.assignedDirector.name}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* PWA status — Admin only */}
       {/* {user?.role === 'admin' && (

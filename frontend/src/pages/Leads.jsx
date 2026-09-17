@@ -162,6 +162,33 @@ export default function Leads() {
 
   useEffect(() => { setPage(1); }, [search, statusFilter, sourceFilter, priorityFilter, propertyFilter, sortMode]);
 
+  // Load persisted filter/view state once user ID is known
+  useEffect(() => {
+    if (!user?._id) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(`leads_state_${user._id}`) || 'null');
+      if (saved && typeof saved === 'object') {
+        if (typeof saved.search          === 'string') setSearch(saved.search);
+        if (typeof saved.statusFilter    === 'string') setStatusFilter(saved.statusFilter);
+        if (typeof saved.sourceFilter    === 'string') setSourceFilter(saved.sourceFilter);
+        if (typeof saved.priorityFilter  === 'string') setPriorityFilter(saved.priorityFilter);
+        if (typeof saved.propertyFilter  === 'string') setPropertyFilter(saved.propertyFilter);
+        if (typeof saved.sortMode        === 'string') setSortMode(saved.sortMode);
+        if (typeof saved.viewMode        === 'string') setViewMode(saved.viewMode);
+      }
+    } catch (_) {}
+  }, [user?._id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist filter/view state whenever it changes
+  useEffect(() => {
+    if (!user?._id) return;
+    try {
+      localStorage.setItem(`leads_state_${user._id}`, JSON.stringify({
+        search, statusFilter, sourceFilter, priorityFilter, propertyFilter, sortMode, viewMode,
+      }));
+    } catch (_) {}
+  }, [user?._id, search, statusFilter, sourceFilter, priorityFilter, propertyFilter, sortMode, viewMode]);
+
   // PHASE D FIX: previously destructured only {status, notes}, silently
   // dropping followUpDate (and any other field) before sending to the
   // API — a pre-existing bug. Now forwards whatever payload the caller
