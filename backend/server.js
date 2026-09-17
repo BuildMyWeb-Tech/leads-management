@@ -46,10 +46,11 @@ app.use(cors({
 }));
 
 // ── Rate limiting — auth routes ────────────────────────────────
-// 10 attempts per 15 minutes per IP on login/register.
+// 30 attempts per 15 minutes per IP on login — allows multi-device/multi-account
+// testing while still blocking abusive brute-force attempts.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max:      10,
+  max:      30,
   standardHeaders: true,
   legacyHeaders:   false,
   message: { message: 'Too many login attempts. Please try again later.' },

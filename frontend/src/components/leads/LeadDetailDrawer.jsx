@@ -415,20 +415,33 @@ export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
 
           {/* 9. Assignment */}
           <LeadFieldSection title="Assignment">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">Director</span>
-                {lead.assignedDirector ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-semibold text-blue-700 flex-shrink-0">
-                      {lead.assignedDirector.name.charAt(0)}
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">Director</span>
+                  {lead.assignedDirector ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-semibold text-blue-700 flex-shrink-0">
+                        {lead.assignedDirector.name.charAt(0)}
+                      </div>
+                      <span className="text-sm text-gray-800 truncate">{lead.assignedDirector.name}</span>
                     </div>
-                    <span className="text-sm text-gray-800 truncate">{lead.assignedDirector.name}</span>
-                  </div>
-                ) : <span className="text-sm text-orange-400 font-medium">Unassigned</span>}
+                  ) : <span className="text-sm text-orange-400 font-medium">Unassigned</span>}
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">Team Lead</span>
+                  {lead.assignedTelecaller?.managedBy ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-teal-100 flex items-center justify-center text-xs font-semibold text-teal-700 flex-shrink-0">
+                        {(lead.assignedTelecaller.managedBy.name || '?').charAt(0)}
+                      </div>
+                      <span className="text-sm text-gray-800 truncate">{lead.assignedTelecaller.managedBy.name}</span>
+                    </div>
+                  ) : <span className="text-sm text-gray-400">—</span>}
+                </div>
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">Telecaller</span>
+                <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">Employee</span>
                 {lead.assignedTelecaller ? (
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-xs font-semibold text-green-700 flex-shrink-0">

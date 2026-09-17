@@ -9,14 +9,14 @@ import { useNavigate } from 'react-router-dom';
 export default function TopBar({ onMenuOpen }) {
   const navigate = useNavigate();
 
-  // All roles can add leads
+  // All roles can add leads; visible on all screen sizes
   return (
-    <header className="lg:hidden flex-shrink-0 h-14 bg-white border-b border-gray-200
+    <header className="flex-shrink-0 h-14 bg-white border-b border-gray-200
                        flex items-center justify-between px-4 z-30 relative">
-      {/* Hamburger */}
+      {/* Hamburger — mobile only */}
       <button
         onClick={onMenuOpen}
-        className="w-10 h-10 flex items-center justify-center rounded-lg
+        className="lg:hidden w-10 h-10 flex items-center justify-center rounded-lg
                    text-gray-600 hover:bg-gray-100 active:bg-gray-200
                    transition-colors"
         aria-label="Open menu"
@@ -42,7 +42,7 @@ export default function TopBar({ onMenuOpen }) {
       {/* Right side: notification bell + add lead (all roles) */}
       <div className="flex items-center gap-1">
         <button
-          onClick={() => navigate('/add-lead')}
+          onClick={() => navigate('/leads/add')}
           className="w-9 h-9 flex items-center justify-center rounded-lg
                      text-blue-600 hover:bg-blue-50 active:bg-blue-100
                      transition-colors"
@@ -54,7 +54,7 @@ export default function TopBar({ onMenuOpen }) {
           </svg>
         </button>
         <button
-          onClick={() => navigate('/notification-settings')}
+          onClick={() => navigate('/notifications')}
           className="w-9 h-9 flex items-center justify-center rounded-lg
                      text-gray-600 hover:bg-gray-100 active:bg-gray-200
                      transition-colors"

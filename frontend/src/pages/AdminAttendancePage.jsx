@@ -20,6 +20,27 @@ export default function AdminAttendancePage() {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
   const [drawer,  setDrawer]  = useState(null); // employee object | null
+  const [managingId, setManagingId] = useState(null);
+
+  const canManage = user?.role === 'admin' || user?.role === 'director';
+  const isToday = date === todayISO();
+
+  const handleManage = async (employeeId, action) => {
+    setManagingId(employeeId);
+    try {
+      await api.post('/attendance/manage', { employeeId, action });
+      setReport((prev) => prev.map((r) =>
+        r.employee._id === employeeId
+          ? { ...r, present: action === 'present', markedAt: action === 'present' ? new Date() : null }
+          : r
+      ));
+      toast.success(action === 'present' ? 'Marked present' : 'Marked absent');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update attendance');
+    } finally {
+      setManagingId(null);
+    }
+  };
 
   const loadReport = useCallback(async (d) => {
     setLoading(true);
@@ -104,7 +125,7 @@ export default function AdminAttendancePage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Employee</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Marked At</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">History</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -128,12 +149,29 @@ export default function AdminAttendancePage() {
                         {fmtTime(row.markedAt)}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => setDrawer(row.employee)}
-                          className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                        >
-                          View History
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          {canManage && isToday && (
+                            <button
+                              onClick={() => handleManage(row.employee._id, row.present ? 'absent' : 'present')}
+                              disabled={managingId === row.employee._id}
+                              className={`text-xs px-2 py-1 rounded font-medium transition-colors disabled:opacity-40
+                                ${row.present
+                                  ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                                  : 'bg-green-50 text-green-600 hover:bg-green-100'
+                                }`}
+                            >
+                              {managingId === row.employee._id
+                                ? '...'
+                                : row.present ? 'Mark Absent' : 'Mark Present'}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setDrawer(row.employee)}
+                            className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            History
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -162,12 +200,24 @@ export default function AdminAttendancePage() {
                       }`}>
                         {row.present ? 'Present' : 'Absent'}
                       </span>
-                      <button
-                        onClick={() => setDrawer(row.employee)}
-                        className="text-xs text-blue-600 hover:text-blue-800"
-                      >
-                        History
-                      </button>
+                      <div className="flex gap-2">
+                        {canManage && isToday && (
+                          <button
+                            onClick={() => handleManage(row.employee._id, row.present ? 'absent' : 'present')}
+                            disabled={managingId === row.employee._id}
+                            className={`text-xs font-medium transition-colors disabled:opacity-40
+                              ${row.present ? 'text-red-500 hover:text-red-700' : 'text-green-600 hover:text-green-800'}`}
+                          >
+                            {managingId === row.employee._id ? '...' : row.present ? 'Absent' : 'Present'}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setDrawer(row.employee)}
+                          className="text-xs text-blue-600 hover:text-blue-800"
+                        >
+                          History
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

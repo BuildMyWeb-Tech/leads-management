@@ -184,4 +184,71 @@ const getEmployeeHistory = async (req, res) => {
   }
 };
 
-module.exports = { markPresent, getTodayStatus, getPresentEmployees, getOwnHistory, getAttendanceReport, getEmployeeHistory };
+// POST /api/attendance/manage
+// admin/director only — mark an employee present or absent for today
+// Director: scoped to own hierarchy (employees under their TLs)
+const manageAttendance = async (req, res) => {
+  try {
+    const { employeeId, action } = req.body;
+
+    if (!employeeId || !action) {
+      return res.status(400).json({ message: 'employeeId and action are required' });
+    }
+    if (action !== 'present' && action !== 'absent') {
+      return res.status(400).json({ message: 'action must be "present" or "absent"' });
+    }
+
+    const empFilter = { _id: employeeId, role: 'telecaller', isActive: { $ne: false } };
+
+    // Director: scope to employees under own TLs
+    if (req.user.role === 'director') {
+      const tls = await User.find({
+        role: 'tl', managedBy: req.user._id, isActive: { $ne: false },
+      }).select('_id').lean();
+      const tlIds = tls.map((t) => t._id);
+      empFilter.managedBy = { $in: tlIds };
+    }
+
+    const employee = await User.findOne(empFilter).select('_id name').lean();
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee not found or access denied' });
+    }
+
+    const todayIST = getISTDateString();
+
+    if (action === 'present') {
+      let created = false;
+      try {
+        const result = await Attendance.findOneAndUpdate(
+          { employee: employeeId, businessDate: todayIST },
+          { $setOnInsert: { markedAt: new Date() } },
+          { upsert: true, new: true, rawResult: true }
+        );
+        created = result.lastErrorObject?.upserted != null;
+      } catch (err) {
+        if (err.code !== 11000) throw err;
+      }
+      audit.log(req, 'attendance_managed',
+        { type: 'user', _id: employee._id, name: employee.name },
+        { before: null, after: { businessDate: todayIST, action: 'present', managedBy: req.user.name } },
+        `${req.user.name} marked ${employee.name} present for ${todayIST}`
+      );
+      return res.json({ message: `${employee.name} marked present`, present: true, created });
+    }
+
+    // action === 'absent': remove today's record
+    const deleted = await Attendance.findOneAndDelete({
+      employee: employeeId, businessDate: todayIST,
+    });
+    audit.log(req, 'attendance_managed',
+      { type: 'user', _id: employee._id, name: employee.name },
+      { before: { businessDate: todayIST }, after: { action: 'absent', managedBy: req.user.name } },
+      `${req.user.name} marked ${employee.name} absent for ${todayIST}`
+    );
+    return res.json({ message: `${employee.name} marked absent`, present: false, removed: !!deleted });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { markPresent, getTodayStatus, getPresentEmployees, getOwnHistory, getAttendanceReport, getEmployeeHistory, manageAttendance };

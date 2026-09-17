@@ -26,7 +26,7 @@ const PRIORITY_TO_COLUMN = { Hot: 'HOT', Warm: 'WARM', Cold: 'HOLD' };
 const COLUMN_CONFIG = {
   HOT:  { label: 'HOT',  emoji: '🔥', color: 'border-red-300',    header: 'bg-red-50',    dot: 'bg-red-500'    },
   WARM: { label: 'WARM', emoji: '🌡️', color: 'border-orange-300', header: 'bg-orange-50', dot: 'bg-orange-400' },
-  HOLD: { label: 'HOLD', emoji: '❄️', color: 'border-blue-200',   header: 'bg-blue-50',   dot: 'bg-blue-400'   },
+  HOLD: { label: 'COLD', emoji: '❄️', color: 'border-blue-200',   header: 'bg-blue-50',   dot: 'bg-blue-400'   },
 };
 
 const COLUMNS = ['HOT', 'WARM', 'HOLD'];

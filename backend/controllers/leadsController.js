@@ -218,7 +218,8 @@ const getLeads = async (req, res) => {
     },
     {
       path: 'assignedTelecaller',
-      select: 'name email',
+      select: 'name email managedBy',
+      populate: { path: 'managedBy', select: 'name email' },
     },
   ]);
 
@@ -233,7 +234,7 @@ const getLeads = async (req, res) => {
     const total = await Lead.countDocuments(filter);
     const leads = await Lead.find(filter)
       .populate('assignedDirector',   'name email')
-      .populate('assignedTelecaller', 'name email')
+      .populate({ path: 'assignedTelecaller', select: 'name email managedBy', populate: { path: 'managedBy', select: 'name email' } })
       .sort({ createdAt: -1 })
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit));

@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
 import { LEAD_STATUSES, STATUS_BAR_COLORS, STATUS_BADGE_CLASSES } from '../constants/leadConstants';
 import KpiCard from '../components/director/KpiCard';
 import PwaStatusCard from '../components/pwa/PwaStatusCard';
-import toast from 'react-hot-toast';
 
 function StatCard({ label, value, color = 'text-gray-900', sub, icon }) {
   return (
@@ -36,10 +36,10 @@ export default function Dashboard() {
   const [stats, setStats]           = useState(null);
   const [allocStats, setAllocStats] = useState(null);
   const [loading, setLoading]       = useState(true);
-  // PHASE E: explicit error state — a failed stats fetch must never
-  // silently render as an all-zero dashboard (previous behavior: no
-  // catch at all on the primary fetch).
   const [error, setError]           = useState(null);
+  // Telecaller attendance shortcut
+  const [attendance, setAttendance] = useState(null); // { present, markedAt } | null
+  const [markingPresent, setMarkingPresent] = useState(false);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -65,6 +65,28 @@ export default function Dashboard() {
   }, [user]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Load today's attendance status for telecaller
+  useEffect(() => {
+    if (user?.role !== 'telecaller') return;
+    api.get('/attendance/today')
+      .then(({ data }) => setAttendance(data))
+      .catch(() => {}); // non-fatal
+  }, [user]);
+
+  const handleMarkPresent = async () => {
+    setMarkingPresent(true);
+    try {
+      const { data } = await api.post('/attendance/mark-present');
+      setAttendance({ present: true, markedAt: data.attendance?.markedAt || new Date() });
+      if (!data.alreadyMarked) toast.success('Attendance marked — you are Present today!');
+      else toast('Already marked present today');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to mark attendance');
+    } finally {
+      setMarkingPresent(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -120,6 +142,51 @@ export default function Dashboard() {
           </Link>
         )}
       </div>
+
+      {/* ── Telecaller: Today's Attendance shortcut ─────────── */}
+      {user?.role === 'telecaller' && (
+        <div className="card mb-5 flex items-center justify-between gap-4 p-4">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">
+              Today's Attendance
+            </p>
+            {attendance?.present ? (
+              <div>
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-700">
+                  <span className="w-2 h-2 rounded-full bg-green-500" />
+                  Present
+                </span>
+                {attendance.markedAt && (
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Marked at {new Date(attendance.markedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">Not yet marked for today</p>
+            )}
+          </div>
+          {!attendance?.present && (
+            <button
+              onClick={handleMarkPresent}
+              disabled={markingPresent}
+              className="btn-primary flex-shrink-0 text-sm"
+            >
+              {markingPresent ? (
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+              Mark Present
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── KPI cards — 2 cols mobile, 4 cols desktop ─────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">

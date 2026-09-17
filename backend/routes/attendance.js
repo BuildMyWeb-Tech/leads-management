@@ -8,6 +8,7 @@ const {
   getOwnHistory,
   getAttendanceReport,
   getEmployeeHistory,
+  manageAttendance,
 } = require('../controllers/attendanceController');
 
 router.post('/mark-present',           protect, authorize('telecaller'),               markPresent);
@@ -16,5 +17,6 @@ router.get('/employees/present',       protect, authorize('admin', 'director', '
 router.get('/history',                 protect, authorize('telecaller'),               getOwnHistory);
 router.get('/report',                  protect, authorize('admin', 'director', 'tl'),  getAttendanceReport);
 router.get('/employee/:id/history',    protect, authorize('admin', 'director', 'tl'),  getEmployeeHistory);
+router.post('/manage',                 protect, authorize('admin', 'director'),          manageAttendance);
 
 module.exports = router;
