@@ -208,6 +208,26 @@ export default function DirectorDashboard() {
         />
       </div>
 
+      {/* Pending allocation banner — only when there are unassigned leads */}
+      {k.unassignedTC > 0 && (
+        <div className="mb-5 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3
+                        flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-orange-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-sm font-medium text-orange-800">
+              Pending Allocation: <strong>{k.unassignedTC}</strong> lead{k.unassignedTC !== 1 ? 's' : ''} awaiting employee assignment
+            </span>
+          </div>
+          <Link to="/leads?pendingAllocation=1"
+            className="text-xs text-orange-700 font-medium hover:underline flex-shrink-0">
+            View →
+          </Link>
+        </div>
+      )}
+
       {/* ── Tabs — scrollable on mobile ──────────────────── */}
       <div className="status-tabs mb-5">
         {[
@@ -256,6 +276,39 @@ export default function DirectorDashboard() {
             </div>
           </Section>
 
+          {/* Hot / Warm / Cold priority strips */}
+          {[(data?.hotLeads || []), (data?.warmLeads || []), (data?.coldLeads || [])].some((arr) => arr.length > 0) && (
+            <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[
+                { label: 'Hot', leads: data?.hotLeads || [], color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100' },
+                { label: 'Warm', leads: data?.warmLeads || [], color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-100' },
+                { label: 'Cold', leads: data?.coldLeads || [], color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
+              ].map(({ label, leads, color, bg, border }) => (
+                <div key={label} className={`rounded-xl border ${border} ${bg} p-4`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className={`text-sm font-semibold ${color}`}>{label}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${color} bg-white border ${border}`}>{leads.length}</span>
+                  </div>
+                  {leads.length === 0 ? (
+                    <p className="text-xs text-gray-400">No {label.toLowerCase()} leads</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {leads.slice(0, 5).map((lead) => (
+                        <div key={lead._id} className="text-xs">
+                          <p className="font-medium text-gray-800 truncate">{lead.name}</p>
+                          <p className="text-gray-400 truncate">{lead.assignedTelecaller?.name || 'Unassigned'} · {lead.status}</p>
+                        </div>
+                      ))}
+                      {leads.length > 5 && (
+                        <p className="text-xs text-gray-400">+{leads.length - 5} more</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="lg:col-span-3">
             <Section title="Recent leads"
               action={<Link to="/leads" className="text-xs text-blue-600 hover:underline">View all →</Link>}>
@@ -270,6 +323,7 @@ export default function DirectorDashboard() {
                         <th className="table-th">Phone</th>
                         <th className="table-th hidden md:table-cell">Source</th>
                         <th className="table-th">Status</th>
+                        <th className="table-th hidden sm:table-cell">Priority</th>
                         <th className="table-th hidden lg:table-cell">Telecaller</th>
                         <th className="table-th hidden xl:table-cell">Date</th>
                       </tr>
@@ -300,6 +354,14 @@ export default function DirectorDashboard() {
                           <td className="table-td hidden md:table-cell text-gray-500">{lead.source}</td>
                           <td className="table-td">
                             <StatusEditor lead={lead} onSave={handleStatusSave} compact />
+                          </td>
+                          <td className="table-td hidden sm:table-cell">
+                            <span className={`text-xs font-medium px-1.5 py-0.5 rounded
+                              ${lead.priority === 'Hot' ? 'bg-red-100 text-red-600'
+                                : lead.priority === 'Warm' ? 'bg-orange-100 text-orange-600'
+                                : 'bg-blue-100 text-blue-600'}`}>
+                              {lead.priority || 'Cold'}
+                            </span>
                           </td>
                           <td className="table-td hidden lg:table-cell text-xs text-gray-500">
                             {lead.assignedTelecaller?.name || (

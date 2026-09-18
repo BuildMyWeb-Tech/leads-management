@@ -73,6 +73,9 @@ const getDirectorDashboard = async (req, res) => {
       sourceBreakdown,
       telecallerBreakdown,
       recentLeads,
+      hotLeads,
+      warmLeads,
+      coldLeads,
       overdueFollowUps,   // G.2 P1-007
       todayFollowUps,     // G.2 P1-007
       upcomingFollowUps,  // G.2 P1-007
@@ -121,6 +124,25 @@ const getDirectorDashboard = async (req, res) => {
       Lead.find(baseFilter)
         .sort({ createdAt: -1 })
         .limit(8)
+        .select('name phone source status priority createdAt assignedTelecaller')
+        .populate('assignedTelecaller', 'name'),
+
+      Lead.find({ ...baseFilter, priority: 'Hot' })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .select('name phone status priority source createdAt assignedTelecaller')
+        .populate('assignedTelecaller', 'name'),
+
+      Lead.find({ ...baseFilter, priority: 'Warm' })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .select('name phone status priority source createdAt assignedTelecaller')
+        .populate('assignedTelecaller', 'name'),
+
+      Lead.find({ ...baseFilter, priority: 'Cold' })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .select('name phone status priority source createdAt assignedTelecaller')
         .populate('assignedTelecaller', 'name'),
 
       // G.2 FIX (P1-007): split follow-ups into overdue / today / upcoming
@@ -211,6 +233,9 @@ const getDirectorDashboard = async (req, res) => {
       sourceBreakdown,
       telecallerBreakdown: enrichedTelecallers,
       recentLeads,
+      hotLeads,
+      warmLeads,
+      coldLeads,
       // G.2 P1-007: date-segmented follow-ups replace the old mixed list
       followUps: overdueFollowUps,   // kept for backward compatibility (UI "Follow Ups" tab)
       overdueFollowUps,

@@ -6,7 +6,16 @@ const getUsers = async (req, res) => {
     const { role } = req.query;
     const filter = { isActive: { $ne: false } }; // hide soft-deleted users
     if (role) filter.role = role;
-    if (req.user.role === 'director') filter.role = 'telecaller';
+    if (req.user.role === 'director') {
+      // Director sees their own TLs and the telecallers under those TLs
+      const ownTLs = await User.find({ role: 'tl', managedBy: req.user._id, isActive: { $ne: false } }, '_id').lean();
+      const tlIds = ownTLs.map((t) => t._id);
+      delete filter.role;
+      filter.$or = [
+        { role: 'tl', managedBy: req.user._id },
+        { role: 'telecaller', managedBy: { $in: tlIds } },
+      ];
+    }
     // K2: TL sees only employees managed by themselves
     if (req.user.role === 'tl') {
       filter.role = 'telecaller';
@@ -30,17 +39,35 @@ const createUser = async (req, res) => {
         return res.status(403).json({ message: 'Team Leads can only create Employee accounts' });
       }
     }
+    // Director can create TL or telecaller within their own hierarchy
+    if (req.user.role === 'director') {
+      if (role && !['tl', 'telecaller'].includes(role)) {
+        return res.status(403).json({ message: 'Directors can only create Team Lead or Employee accounts' });
+      }
+    }
 
     const resolvedRole = (req.user.role === 'tl') ? 'telecaller' : (role || 'telecaller');
 
     // Validate managedBy: role-aware.
-    //   TL caller  → auto-set to self (TL owns their employees)
+    //   TL caller      → auto-set to self (TL owns their employees)
+    //   Director caller creating TL → auto-set managedBy to self
+    //   Director caller creating telecaller → managedBy must be one of their TLs
     //   Admin creating TL       → managedBy must be a Director (or omitted)
     //   Admin creating telecaller → managedBy must be a TL (or omitted)
     let resolvedManagedBy = managedBy || null;
     if (req.user.role === 'tl') {
       // TL always owns their created employees
       resolvedManagedBy = req.user._id;
+    } else if (req.user.role === 'director') {
+      if (resolvedRole === 'tl') {
+        resolvedManagedBy = req.user._id;
+      } else if (resolvedManagedBy) {
+        // Must be a TL managed by this director
+        const manager = await User.findById(resolvedManagedBy).select('role managedBy');
+        if (!manager || manager.role !== 'tl' || String(manager.managedBy) !== String(req.user._id)) {
+          return res.status(400).json({ message: 'Assigned Team Lead must belong to your hierarchy' });
+        }
+      }
     } else if (resolvedManagedBy) {
       const manager = await User.findById(resolvedManagedBy).select('role');
       if (!manager) {
@@ -81,10 +108,10 @@ const updateUser = async (req, res) => {
       await userDoc.save();
     }
 
-    // Restrict role changes to safe values — admin/director cannot be set via this endpoint
-    const ALLOWED_ROLES = ['tl', 'telecaller'];
+    // Restrict role changes to safe values — admin cannot be set via this endpoint
+    const ALLOWED_ROLES = ['tl', 'telecaller', 'director'];
     if (role && !ALLOWED_ROLES.includes(role)) {
-      return res.status(400).json({ message: 'Role must be tl or telecaller' });
+      return res.status(400).json({ message: 'Role must be tl, telecaller, or director' });
     }
 
     // Validate managedBy based on the target role:
@@ -92,7 +119,7 @@ const updateUser = async (req, res) => {
     //   - tl:         managedBy must be null or point to a Director
     //   - other roles not reachable here (blocked above)
     const effectiveRole = role || (await User.findById(req.params.id).select('role').lean())?.role;
-    if (managedBy) {
+    if (managedBy && effectiveRole !== 'director') {
       const manager = await User.findById(managedBy).select('role');
       if (effectiveRole === 'tl') {
         if (!manager || manager.role !== 'director') {

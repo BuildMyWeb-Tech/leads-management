@@ -2,7 +2,7 @@ const Lead         = require('../models/Lead');
 const XLSX         = require('xlsx');
 const { pickNextDirector, pickNextEmployee } = require('../utils/allocationEngine');
 const syncToSheets = require('../utils/syncToSheets');
-const { normalisePhone, normaliseForDedupe } = require('../utils/phoneUtils');
+const { normalisePhone, normaliseForDedupe, validatePhone } = require('../utils/phoneUtils');
 const { regenerateDirectorView } = require('../utils/syncToSheets');
 const { notify }   = require('../utils/pushService');
 const audit        = require('../utils/auditService');   // PHASE 10
@@ -60,6 +60,31 @@ const getLeads = async (req, res) => {
         { email:  { $regex: safeSearch, $options: 'i' } },
         { leadId: { $regex: safeSearch, $options: 'i' } },
       ];
+    }
+
+    // Req 3/4: pending allocation filter — leads with a director but no telecaller
+    // TL needs special handling since their visibility filter scopes to assignedTelecaller
+    if (req.query.pendingAllocation === '1' && ['admin', 'director', 'tl'].includes(req.user.role)) {
+      if (req.user.role === 'admin') {
+        // Admin: all leads that have a director but no telecaller
+        Object.keys(filter).forEach((k) => delete filter[k]);
+        filter.assignedDirector = { $ne: null };
+        filter.assignedTelecaller = null;
+      } else if (req.user.role === 'director') {
+        // Director visibility already scopes to assignedDirector: user._id
+        filter.assignedTelecaller = null;
+      } else if (req.user.role === 'tl') {
+        // TL: find their director, show pending leads for that director
+        const User = require('../models/User');
+        const tlUser = await User.findById(req.user._id).select('managedBy').lean();
+        if (tlUser?.managedBy) {
+          Object.keys(filter).forEach((k) => delete filter[k]);
+          filter.assignedDirector = tlUser.managedBy;
+          filter.assignedTelecaller = null;
+        } else {
+          return res.json({ leads: [], total: 0, page: 1, pages: 0 });
+        }
+      }
     }
 
     if (sort === 'priority') {
@@ -280,6 +305,11 @@ const createLead = async (req, res) => {
     Object.keys(leadData).forEach((k) => {
       if (leadData[k] === undefined) delete leadData[k];
     });
+
+    // Req 3: Validate phone per Indian phone rules
+    if (leadData.phone && !validatePhone(leadData.phone)) {
+      return res.status(400).json({ message: 'Invalid phone number. Use a 10-digit Indian number (starting 6–9), +91 followed by 10 digits, or a valid international number with + prefix.' });
+    }
 
     // K2: Employee (telecaller) creates lead for themselves — server enforces ownership.
     // Phase 2 employee-selection must NOT overwrite this self-ownership.
@@ -742,9 +772,25 @@ const getDashboardStats = async (req, res) => {
       }),
     ]);
     const unassigned = await Lead.countDocuments({ ...filter, assignedDirector: null });
+
+    // Req 4: pending allocation count — leads with director but no telecaller
+    // TL needs special scoping (their visibility filter uses assignedTelecaller)
+    let pendingAllocationCount = 0;
+    if (req.user.role === 'admin') {
+      pendingAllocationCount = await Lead.countDocuments({ assignedDirector: { $ne: null }, assignedTelecaller: null });
+    } else if (req.user.role === 'director') {
+      pendingAllocationCount = await Lead.countDocuments({ assignedDirector: req.user._id, assignedTelecaller: null });
+    } else if (req.user.role === 'tl') {
+      const User = require('../models/User');
+      const tlUser = await User.findById(req.user._id).select('managedBy').lean();
+      if (tlUser?.managedBy) {
+        pendingAllocationCount = await Lead.countDocuments({ assignedDirector: tlUser.managedBy, assignedTelecaller: null });
+      }
+    }
+
     const priorityBreakdown = Object.fromEntries(priorityStats.map((p) => [p._id, p.count]));
     res.json({
-      totalLeads, unassigned, statusStats, sourceStats, directorStats, hotLeads, warmLeads,
+      totalLeads, unassigned, pendingAllocationCount, statusStats, sourceStats, directorStats, hotLeads, warmLeads,
       // G.2 additions
       priorityBreakdown: {
         hot:  priorityBreakdown['Hot']  || 0,
@@ -756,4 +802,56 @@ const getDashboardStats = async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
-module.exports = { getLeads, createLead, getLead, updateLead, deleteLead, bulkAssign, importCSV, getDashboardStats };
+// ── PUT /api/leads/:id/assign-employee ──────────────────────────
+// Manual quick-assignment of an employee to a specific lead.
+// Allowed for admin, director, tl. Employee must be present today.
+const assignEmployee = async (req, res) => {
+  try {
+    const { employeeId } = req.body;
+    if (!employeeId) return res.status(400).json({ message: 'employeeId is required' });
+
+    // Verify lead is visible to this caller
+    const visFilter = req.user.role === 'admin' ? {} : await buildLeadVisibilityFilter(req.user);
+    const lead = await Lead.findOne({ _id: req.params.id, ...visFilter });
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+
+    const User = require('../models/User');
+    const Attendance = require('../models/Attendance');
+    const { getISTDateString } = require('../utils/dateHelper');
+
+    // Verify the employee exists and is a telecaller
+    const empFilter = { _id: employeeId, role: 'telecaller', isActive: { $ne: false } };
+    // TL: scope to own team
+    if (req.user.role === 'tl') empFilter.managedBy = req.user._id;
+    // Director: scope to employees under their TLs
+    if (req.user.role === 'director') {
+      const tls = await User.find({ role: 'tl', managedBy: req.user._id }, '_id').lean();
+      empFilter.managedBy = { $in: tls.map((t) => t._id) };
+    }
+    const employee = await User.findOne(empFilter).select('_id name');
+    if (!employee) return res.status(404).json({ message: 'Employee not found or access denied' });
+
+    // Attendance gate — employee must be present today
+    const todayIST = getISTDateString();
+    const attendance = await Attendance.findOne({ employee: employeeId, businessDate: todayIST });
+    if (!attendance) return res.status(400).json({ message: 'This employee is not marked present today' });
+
+    const prevTelecaller = lead.assignedTelecaller?.toString();
+    lead.assignedTelecaller = employeeId;
+    await lead.save();
+
+    const updated = await Lead.findById(lead._id)
+      .populate('assignedDirector', 'name email')
+      .populate('assignedTelecaller', 'name email');
+
+    res.json(updated);
+
+    audit.leadAssignedTelecaller(req, updated, employee.name);
+    notify.leadAssignedToTelecaller(employeeId, updated.name);
+    if (prevTelecaller !== employeeId) {
+      syncToSheets(updated, 'update');
+    }
+  } catch (err) { res.status(500).json({ message: err.message }); }
+};
+
+module.exports = { getLeads, createLead, getLead, updateLead, deleteLead, bulkAssign, importCSV, getDashboardStats, assignEmployee };

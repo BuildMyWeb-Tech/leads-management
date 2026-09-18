@@ -64,4 +64,36 @@ const normaliseForDedupe = (raw) => {
   return String(raw).replace(/\D/g, '');
 };
 
-module.exports = { normalisePhone, normaliseForDedupe };
+/**
+ * Validate a phone number per Indian phone rules:
+ *   LOCAL: exactly 10 digits starting 6–9 (no prefix)
+ *   INDIA INTERNATIONAL: +91 followed by exactly 10 digits starting 6–9
+ *   OTHER INTERNATIONAL: + followed by 6–20 digits total
+ *   REJECTS: 0091 prefix, unprefixed numbers with 11+ digits
+ * Returns true if valid, false otherwise.
+ */
+const validatePhone = (raw) => {
+  if (!raw) return false;
+  const s = String(raw).trim();
+
+  if (s.startsWith('+')) {
+    const digits = s.slice(1).replace(/\D/g, '');
+    // +91 India: MUST be exactly 12 digits (+91 + 10) starting 6–9 after 91.
+    // Any +91 with wrong digit count is invalid (never fall through to generic).
+    if (digits.startsWith('91')) {
+      return digits.length === 12 && /^[6-9]/.test(digits.slice(2));
+    }
+    // Other international: 6–20 digits after the +
+    return digits.length >= 6 && digits.length <= 20;
+  }
+
+  const digits = s.replace(/\D/g, '');
+  // Local Indian: exactly 10 digits starting 6–9
+  if (digits.length === 10) {
+    return /^[6-9]/.test(digits);
+  }
+  // Reject unprefixed numbers with 11+ digits (ambiguous country code)
+  return false;
+};
+
+module.exports = { normalisePhone, normaliseForDedupe, validatePhone };

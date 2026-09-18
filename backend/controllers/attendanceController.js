@@ -1,7 +1,56 @@
 const Attendance = require('../models/Attendance');
 const User       = require('../models/User');
+const Lead       = require('../models/Lead');
 const { getISTDateString } = require('../utils/dateHelper');
 const audit      = require('../utils/auditService');
+
+// Req 7: After an employee is marked present, try to assign any leads under
+// their director that have no telecaller yet (assignedTelecaller === null).
+// Uses existing pickNextEmployee for workload-based selection (not just the
+// newly-present employee), FIFO ordering, atomic assignment, and audit.
+const allocatePendingLeadsToEmployee = async (employeeId) => {
+  const { pickNextEmployee } = require('../utils/allocationEngine');
+
+  const employee = await User.findById(employeeId).select('managedBy').lean();
+  if (!employee?.managedBy) return;
+  // Find the director via: employee → TL (managedBy) → director (TL.managedBy)
+  const tl = await User.findById(employee.managedBy).select('managedBy role').lean();
+  if (!tl || tl.role !== 'tl' || !tl.managedBy) return;
+  const directorId = tl.managedBy;
+
+  // FIFO: oldest pending leads first (createdAt ASC, _id ASC as tiebreaker)
+  const pendingLeads = await Lead.find({
+    assignedDirector: directorId,
+    assignedTelecaller: null,
+  }).select('_id name').sort({ createdAt: 1, _id: 1 }).limit(20).lean();
+
+  for (const pending of pendingLeads) {
+    try {
+      // Use workload-based algorithm for each lead — may assign any present
+      // employee (not necessarily the one who just marked present), enabling
+      // fair distribution when multiple employees are present.
+      const assigneeId = await pickNextEmployee(directorId);
+      if (!assigneeId) break; // no eligible employee — stop processing
+
+      // Atomic: only assign if still unassigned (concurrent-safe)
+      const updated = await Lead.findOneAndUpdate(
+        { _id: pending._id, assignedTelecaller: null },
+        { $set: { assignedTelecaller: assigneeId } },
+        { new: true }
+      );
+
+      if (updated) {
+        // Audit the automatic assignment (synthetic req with system actor)
+        try {
+          const fakeReq = { user: { _id: employeeId, name: 'attendance-trigger', role: 'system' } };
+          audit.leadAssignedTelecaller(fakeReq, updated, String(assigneeId));
+        } catch (_) {}
+      }
+    } catch (_) {
+      // Allocation failure for one lead must not fail attendance or other leads
+    }
+  }
+};
 
 // POST /api/attendance/mark-present
 // telecaller only — marks the calling employee present for today (IST)
@@ -36,6 +85,8 @@ const markPresent = async (req, res) => {
         { before: null, after: { businessDate: todayIST, markedAt: doc?.markedAt } },
         `${req.user.name} marked attendance for ${todayIST}`
       );
+      // Req 7: trigger pending-lead allocation after newly-marking present
+      setImmediate(() => allocatePendingLeadsToEmployee(req.user._id).catch(() => {}));
       return res.status(201).json({ attendance: doc, alreadyMarked: false });
     }
     return res.status(200).json({ attendance: doc, alreadyMarked: true });
@@ -233,6 +284,9 @@ const manageAttendance = async (req, res) => {
         { before: null, after: { businessDate: todayIST, action: 'present', managedBy: req.user.name } },
         `${req.user.name} marked ${employee.name} present for ${todayIST}`
       );
+      if (created) {
+        setImmediate(() => allocatePendingLeadsToEmployee(employee._id).catch(() => {}));
+      }
       return res.json({ message: `${employee.name} marked present`, present: true, created });
     }
 

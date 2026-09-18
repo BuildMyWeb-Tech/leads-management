@@ -24,8 +24,11 @@ export default function CreateUserModal({ type, onClose, onCreated, tls = [], di
     setShowPass(false);
   }, [type]);
 
-  const isAdmin    = user?.role === 'admin';
-  const isEmployee = type === 'employee';
+  const isAdmin      = user?.role === 'admin';
+  const isDirector   = user?.role === 'director';
+  const isEmployee   = type === 'employee';
+  const isTL         = type === 'tl';
+  const isDirectorType = type === 'director';
 
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
@@ -46,17 +49,18 @@ export default function CreateUserModal({ type, onClose, onCreated, tls = [], di
         name:     form.name.trim(),
         email:    form.email.trim(),
         password: form.password,
-        role:     isEmployee ? 'telecaller' : 'tl',
+        role:     isEmployee ? 'telecaller' : isDirectorType ? 'director' : 'tl',
       };
-      if (isAdmin && isEmployee && form.managedBy) {
+      if ((isAdmin || isDirector) && isEmployee && form.managedBy) {
         payload.managedBy = form.managedBy;
       }
-      // S.3: Admin creating TL can assign them to a Director
-      if (isAdmin && !isEmployee && form.managedBy) {
+      // Admin/Director creating TL can assign them to a Director
+      if ((isAdmin || isDirector) && isTL && form.managedBy) {
         payload.managedBy = form.managedBy;
       }
       const { data } = await api.post('/users', payload);
-      toast.success(`${isEmployee ? 'Employee' : 'Team Lead'} created successfully`);
+      const roleLabel = isEmployee ? 'Employee' : isDirectorType ? 'Director' : 'Team Lead';
+      toast.success(`${roleLabel} created successfully`);
       onCreated(data);
       onClose();
     } catch (err) {
@@ -66,7 +70,7 @@ export default function CreateUserModal({ type, onClose, onCreated, tls = [], di
     }
   };
 
-  const title = isEmployee ? 'Create Employee' : 'Create Team Lead';
+  const title = isEmployee ? 'Create Employee' : isDirectorType ? 'Create Director' : 'Create Team Lead';
 
   return (
     <>
@@ -141,8 +145,8 @@ export default function CreateUserModal({ type, onClose, onCreated, tls = [], di
                 </div>
               </div>
 
-              {/* Admin creating Employee → assign to TL */}
-              {isAdmin && isEmployee && (
+              {/* Admin/Director creating Employee → assign to TL */}
+              {(isAdmin || isDirector) && isEmployee && (
                 <div>
                   <label className="label">Assign to Team Lead <span className="text-red-400">*</span></label>
                   <select className="input" value={form.managedBy} onChange={set('managedBy')} required>
@@ -155,7 +159,7 @@ export default function CreateUserModal({ type, onClose, onCreated, tls = [], di
               )}
 
               {/* Admin creating TL → assign to Director (optional) */}
-              {isAdmin && !isEmployee && (
+              {isAdmin && isTL && (
                 <div>
                   <label className="label">Assign to Director <span className="text-gray-400 font-normal text-xs">(optional)</span></label>
                   <select className="input" value={form.managedBy} onChange={set('managedBy')}>
@@ -173,7 +177,7 @@ export default function CreateUserModal({ type, onClose, onCreated, tls = [], di
                   disabled={loading}
                   className="btn-primary flex-1 justify-center"
                 >
-                  {loading ? 'Creating...' : `Create ${isEmployee ? 'Employee' : 'Team Lead'}`}
+                  {loading ? 'Creating...' : `Create ${isEmployee ? 'Employee' : isDirectorType ? 'Director' : 'Team Lead'}`}
                 </button>
                 <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
               </div>

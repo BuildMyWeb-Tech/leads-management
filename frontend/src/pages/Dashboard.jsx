@@ -188,6 +188,51 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ── Follow-up / pending allocation quick-stats ───────── */}
+      {(stats?.followUpKpis?.overdueCount > 0 || stats?.followUpKpis?.todayCount > 0 || (stats?.pendingAllocationCount > 0 && ['admin','director','tl'].includes(user?.role))) && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+          {stats?.followUpKpis?.overdueCount > 0 && (
+            <Link to="/leads?status=Follow+Up" className="card flex items-center gap-3 p-3 border-l-4 border-red-400 hover:bg-red-50 transition-colors">
+              <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 font-medium">Overdue Follow-ups</p>
+                <p className="text-xl font-bold text-red-600">{stats.followUpKpis.overdueCount}</p>
+              </div>
+            </Link>
+          )}
+          {stats?.followUpKpis?.todayCount > 0 && (
+            <Link to="/leads?status=Follow+Up" className="card flex items-center gap-3 p-3 border-l-4 border-orange-400 hover:bg-orange-50 transition-colors">
+              <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 font-medium">Follow-ups Today</p>
+                <p className="text-xl font-bold text-orange-600">{stats.followUpKpis.todayCount}</p>
+              </div>
+            </Link>
+          )}
+          {stats?.pendingAllocationCount > 0 && ['admin','director','tl'].includes(user?.role) && (
+            <Link to="/leads?pendingAllocation=1" className="card flex items-center gap-3 p-3 border-l-4 border-yellow-400 hover:bg-yellow-50 transition-colors">
+              <div className="w-8 h-8 rounded-lg bg-yellow-50 flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 font-medium">Pending Allocation</p>
+                <p className="text-xl font-bold text-yellow-700">{stats.pendingAllocationCount}</p>
+              </div>
+            </Link>
+          )}
+        </div>
+      )}
+
       {/* ── KPI cards — 2 cols mobile, 4 cols desktop ─────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
         <StatCard

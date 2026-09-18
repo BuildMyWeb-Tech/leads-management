@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { getWhatsAppUrl } from '../../utils/phoneUtils';
+import api from '../../utils/api';
 import StatusEditor from './StatusEditor';
 import PipelineStrip from './PipelineStrip';
 import PriorityBadge from './PriorityBadge';
@@ -36,6 +37,11 @@ export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
   // K2: priority editing state
   const [priorityValue, setPriorityValue] = useState(lead.priority || 'Cold');
   const [savingPriority, setSavingPriority] = useState(false);
+  // Req 8: quick employee assignment state
+  const [presentEmployees, setPresentEmployees] = useState([]);
+  const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [assigningEmployee, setAssigningEmployee] = useState(false);
+  const canAssignEmployee = ['admin', 'director', 'tl'].includes(user.role);
 
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
@@ -51,7 +57,29 @@ export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
     setRemarks(lead.remarks || '');
     setEditingProfile(false);
     setPriorityValue(lead.priority || 'Cold');
+    setSelectedEmployee('');
   }, [lead._id]);
+
+  useEffect(() => {
+    if (!canAssignEmployee) return;
+    api.get('/attendance/employees/present')
+      .then((r) => setPresentEmployees(r.data || []))
+      .catch(() => {});
+  }, [lead._id, canAssignEmployee]);
+
+  const handleAssignEmployee = async () => {
+    if (!selectedEmployee) return;
+    setAssigningEmployee(true);
+    try {
+      await api.put(`/leads/${lead._id}/assign-employee`, { employeeId: selectedEmployee });
+      toast.success('Employee assigned successfully');
+      onStatusSave(lead._id, {});
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to assign employee');
+    } finally {
+      setAssigningEmployee(false);
+    }
+  };
 
   if (!lead) return null;
 
@@ -451,6 +479,35 @@ export default function LeadDetailDrawer({ lead, onClose, onStatusSave }) {
                   </div>
                 ) : <span className="text-sm text-orange-400 font-medium">Unassigned</span>}
               </div>
+
+              {/* Quick employee assign — admin/director/tl only */}
+              {canAssignEmployee && (
+                <div className="pt-2 border-t border-gray-100">
+                  <p className="text-xs font-medium text-gray-500 mb-1.5">Assign Employee (present today)</p>
+                  <div className="flex gap-2">
+                    <select
+                      className="input text-xs flex-1"
+                      value={selectedEmployee}
+                      onChange={(e) => setSelectedEmployee(e.target.value)}
+                    >
+                      <option value="">— Select employee —</option>
+                      {presentEmployees.map((emp) => (
+                        <option key={emp._id} value={emp._id}>{emp.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleAssignEmployee}
+                      disabled={!selectedEmployee || assigningEmployee}
+                      className="btn-primary text-xs px-3 py-1.5 min-h-0 disabled:opacity-40"
+                    >
+                      {assigningEmployee ? 'Assigning...' : 'Assign'}
+                    </button>
+                  </div>
+                  {presentEmployees.length === 0 && (
+                    <p className="text-xs text-gray-400 mt-1">No employees present today</p>
+                  )}
+                </div>
+              )}
             </div>
           </LeadFieldSection>
 

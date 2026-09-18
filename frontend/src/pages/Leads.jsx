@@ -116,11 +116,13 @@ export default function Leads() {
   const [total,  setTotal]  = useState(0);
   const [loading, setLoading] = useState(false);
 
-  const [search,           setSearch]           = useState('');
-  const [statusFilter,     setStatusFilter]     = useState('');
-  const [sourceFilter,     setSourceFilter]     = useState('');
-  const [priorityFilter,   setPriorityFilter]   = useState('');
-  const [propertyFilter,   setPropertyFilter]   = useState('');
+  const [search,                 setSearch]                 = useState('');
+  const [statusFilter,           setStatusFilter]           = useState('');
+  const [sourceFilter,           setSourceFilter]           = useState('');
+  const [priorityFilter,         setPriorityFilter]         = useState('');
+  const [propertyFilter,         setPropertyFilter]         = useState('');
+  const [pendingAllocationFilter, setPendingAllocationFilter] = useState(false);
+  const [pendingAllocationCount,  setPendingAllocationCount]  = useState(null);
   // 'createdAt' (default, unchanged behavior) or 'priority' — uses the
   // backend's existing GET /api/leads?sort=priority support
   // (leadsController.js, Phase C) — no client-side reordering of an
@@ -138,12 +140,13 @@ export default function Leads() {
     setLoading(true);
     try {
       const params = { page, limit: LIMIT };
-      if (statusFilter)   params.status       = statusFilter;
-      if (sourceFilter)   params.source       = sourceFilter;
-      if (priorityFilter) params.priority     = priorityFilter;
-      if (propertyFilter) params.propertyType = propertyFilter;
-      if (search)         params.search       = search;
-      if (sortMode === 'priority') params.sort = 'priority';
+      if (statusFilter)            params.status             = statusFilter;
+      if (sourceFilter)            params.source             = sourceFilter;
+      if (priorityFilter)          params.priority           = priorityFilter;
+      if (propertyFilter)          params.propertyType       = propertyFilter;
+      if (search)                  params.search             = search;
+      if (sortMode === 'priority') params.sort               = 'priority';
+      if (pendingAllocationFilter) params.pendingAllocation  = '1';
       const { data } = await api.get('/leads', { params });
       setLeads(data.leads);
       setTotal(data.total);
@@ -153,14 +156,22 @@ export default function Leads() {
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter, sourceFilter, priorityFilter, propertyFilter, sortMode, page]);
+  }, [search, statusFilter, sourceFilter, priorityFilter, propertyFilter, sortMode, page, pendingAllocationFilter]);
 
   useEffect(() => {
     const t = setTimeout(fetchLeads, search ? 350 : 0);
     return () => clearTimeout(t);
   }, [fetchLeads]);
 
-  useEffect(() => { setPage(1); }, [search, statusFilter, sourceFilter, priorityFilter, propertyFilter, sortMode]);
+  useEffect(() => { setPage(1); }, [search, statusFilter, sourceFilter, priorityFilter, propertyFilter, sortMode, pendingAllocationFilter]);
+
+  // Load pending allocation count for admin/director/tl
+  useEffect(() => {
+    if (!['admin', 'director', 'tl'].includes(user?.role)) return;
+    api.get('/leads/dashboard/stats').then((r) => {
+      if (r.data?.pendingAllocationCount != null) setPendingAllocationCount(r.data.pendingAllocationCount);
+    }).catch(() => {});
+  }, [user?.role]);
 
   // Load persisted filter/view state once user ID is known
   useEffect(() => {
@@ -168,13 +179,14 @@ export default function Leads() {
     try {
       const saved = JSON.parse(localStorage.getItem(`leads_state_${user._id}`) || 'null');
       if (saved && typeof saved === 'object') {
-        if (typeof saved.search          === 'string') setSearch(saved.search);
-        if (typeof saved.statusFilter    === 'string') setStatusFilter(saved.statusFilter);
-        if (typeof saved.sourceFilter    === 'string') setSourceFilter(saved.sourceFilter);
-        if (typeof saved.priorityFilter  === 'string') setPriorityFilter(saved.priorityFilter);
-        if (typeof saved.propertyFilter  === 'string') setPropertyFilter(saved.propertyFilter);
-        if (typeof saved.sortMode        === 'string') setSortMode(saved.sortMode);
-        if (typeof saved.viewMode        === 'string') setViewMode(saved.viewMode);
+        if (typeof saved.search                  === 'string')  setSearch(saved.search);
+        if (typeof saved.statusFilter            === 'string')  setStatusFilter(saved.statusFilter);
+        if (typeof saved.sourceFilter            === 'string')  setSourceFilter(saved.sourceFilter);
+        if (typeof saved.priorityFilter          === 'string')  setPriorityFilter(saved.priorityFilter);
+        if (typeof saved.propertyFilter          === 'string')  setPropertyFilter(saved.propertyFilter);
+        if (typeof saved.sortMode                === 'string')  setSortMode(saved.sortMode);
+        if (typeof saved.viewMode                === 'string')  setViewMode(saved.viewMode);
+        if (typeof saved.pendingAllocationFilter === 'boolean') setPendingAllocationFilter(saved.pendingAllocationFilter);
       }
     } catch (_) {}
   }, [user?._id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -184,10 +196,10 @@ export default function Leads() {
     if (!user?._id) return;
     try {
       localStorage.setItem(`leads_state_${user._id}`, JSON.stringify({
-        search, statusFilter, sourceFilter, priorityFilter, propertyFilter, sortMode, viewMode,
+        search, statusFilter, sourceFilter, priorityFilter, propertyFilter, sortMode, viewMode, pendingAllocationFilter,
       }));
     } catch (_) {}
-  }, [user?._id, search, statusFilter, sourceFilter, priorityFilter, propertyFilter, sortMode, viewMode]);
+  }, [user?._id, search, statusFilter, sourceFilter, priorityFilter, propertyFilter, sortMode, viewMode, pendingAllocationFilter]);
 
   // PHASE D FIX: previously destructured only {status, notes}, silently
   // dropping followUpDate (and any other field) before sending to the
@@ -226,9 +238,9 @@ export default function Leads() {
 
   const clearFilters = () => {
     setSearch(''); setStatusFilter(''); setSourceFilter('');
-    setPriorityFilter(''); setPropertyFilter(''); setPage(1);
+    setPriorityFilter(''); setPropertyFilter(''); setPendingAllocationFilter(false); setPage(1);
   };
-  const hasFilters = search || statusFilter || sourceFilter || priorityFilter || propertyFilter;
+  const hasFilters = search || statusFilter || sourceFilter || priorityFilter || propertyFilter || pendingAllocationFilter;
 
   return (
     <>
@@ -240,6 +252,30 @@ export default function Leads() {
             <p className="text-sm text-gray-400 mt-0.5">{total} total records</p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Pending allocation quick filter — admin/director/tl only */}
+            {['admin', 'director', 'tl'].includes(user.role) && (
+              <button
+                onClick={() => setPendingAllocationFilter((v) => !v)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs
+                  font-medium border transition-colors touch-manipulation
+                  ${pendingAllocationFilter
+                    ? 'bg-orange-50 text-orange-700 border-orange-300'
+                    : 'bg-white text-gray-600 border-gray-200'}`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="hidden sm:inline">Pending Allocation</span>
+                <span className="sm:hidden">Pending</span>
+                {pendingAllocationCount != null && pendingAllocationCount > 0 && (
+                  <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold
+                    ${pendingAllocationFilter ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-700'}`}>
+                    {pendingAllocationCount}
+                  </span>
+                )}
+              </button>
+            )}
             {/* Mobile filter toggle */}
             <button
               onClick={() => setShowFilters((v) => !v)}
@@ -372,7 +408,10 @@ export default function Leads() {
               </button>
             </div>
           )}
-          {/* View mode toggle: List | Board */}
+        </div>
+
+        {/* ── View mode toggle — always visible ─────────── */}
+        <div className="flex items-center justify-end mb-3">
           <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden text-xs">
             <button
               onClick={() => setViewMode('list')}

@@ -632,8 +632,8 @@ test('TC-S-05: OCR import calls pickNextDirector but NOT pickNextEmployee (docum
   const src = fs.readFileSync(require.resolve('../controllers/ocrController'), 'utf8');
   assert.ok(src.includes('pickNextDirector'),
     'OCR must call pickNextDirector (Phase 1)');
-  assert.ok(!src.includes('pickNextEmployee'),
-    'OCR currently does NOT call pickNextEmployee — employees are not auto-assigned for OCR leads (known gap)');
+  assert.ok(src.includes('pickNextEmployee'),
+    'OCR must call pickNextEmployee (Phase 8 Req 1: employee allocation on OCR import)');
 });
 
 // ════════════════════════════════════════════════════════════════════════════

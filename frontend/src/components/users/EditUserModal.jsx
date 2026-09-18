@@ -3,6 +3,7 @@ import api from '../../utils/api';
 import toast from 'react-hot-toast';
 
 const ROLE_OPTIONS = [
+  { value: 'director',   label: 'Director' },
   { value: 'tl',         label: 'Team Lead' },
   { value: 'telecaller', label: 'Employee' },
 ];

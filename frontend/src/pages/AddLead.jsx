@@ -16,8 +16,15 @@ const INITIAL = {
 
 const isValidPhone = (raw) => {
   if (!raw) return false;
-  const digits = String(raw).trim().replace(/\D/g, '');
-  return digits.length >= 6 && digits.length <= 15;
+  const s = String(raw).trim();
+  if (s.startsWith('+')) {
+    const digits = s.slice(1).replace(/\D/g, '');
+    if (digits.startsWith('91')) return digits.length === 12 && /^[6-9]/.test(digits.slice(2));
+    return digits.length >= 6 && digits.length <= 20;
+  }
+  const digits = s.replace(/\D/g, '');
+  if (digits.length === 10) return /^[6-9]/.test(digits);
+  return false;
 };
 
 export default function AddLead() {
@@ -36,7 +43,7 @@ export default function AddLead() {
       return false;
     }
     if (!isValidPhone(form.phone)) {
-      toast.error('Enter a valid mobile number (6–15 digits, e.g. +12025550123 or 9876543210)');
+      toast.error('Enter a valid mobile number: 10-digit Indian number (e.g. 9876543210), +91 followed by 10 digits, or international with + prefix');
       return false;
     }
     if (!PROPERTY_TYPES.includes(form.propertyType)) {
@@ -180,7 +187,16 @@ export default function AddLead() {
             </div>
           </div>
 
-          {/* Row 2: Property Type + Location */}
+          {/* Row 2: Purpose */}
+          <div>
+            <label className="label">Purpose <span className="text-red-400">*</span></label>
+            <select className="input" value={form.purpose} onChange={set('purpose')} required>
+              <option value="">— Select —</option>
+              {PURPOSE_OPTIONS.map((p) => <option key={p}>{p}</option>)}
+            </select>
+          </div>
+
+          {/* Row 3: Property Type + Location */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
             <div>
               <label className="label">Property Type <span className="text-red-400">*</span></label>
@@ -247,21 +263,12 @@ export default function AddLead() {
             <input className="input" placeholder="Optional" value={form.remarks} onChange={set('remarks')} />
           </div>
 
-          {/* Row 7: Lead Source + Purpose */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
-            <div>
-              <label className="label">Lead Source</label>
-              <select className="input" value={form.source} onChange={set('source')}>
-                {LEAD_SOURCES.map((s) => <option key={s}>{s}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Purpose <span className="text-red-400">*</span></label>
-              <select className="input" value={form.purpose} onChange={set('purpose')} required>
-                <option value="">— Select —</option>
-                {PURPOSE_OPTIONS.map((p) => <option key={p}>{p}</option>)}
-              </select>
-            </div>
+          {/* Row 7: Lead Source */}
+          <div>
+            <label className="label">Lead Source</label>
+            <select className="input sm:w-64" value={form.source} onChange={set('source')}>
+              {LEAD_SOURCES.map((s) => <option key={s}>{s}</option>)}
+            </select>
           </div>
 
           {/* Row 8: Email (last — optional) */}

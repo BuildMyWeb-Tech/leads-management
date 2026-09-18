@@ -111,9 +111,9 @@ export default function App() {
         <Route path="/audit-logs"
           element={<ProtectedRoute allowedRoles={['admin']}><AuditLogs /></ProtectedRoute>} />
 
-        {/* K2: User Management — admin + TL */}
+        {/* K2 + Req5: User Management — admin + TL + Director */}
         <Route path="/admin/users"
-          element={<ProtectedRoute allowedRoles={['admin','tl']}><UserManagement /></ProtectedRoute>} />
+          element={<ProtectedRoute allowedRoles={['admin','tl','director']}><UserManagement /></ProtectedRoute>} />
 
         {/* R.2: Attendance */}
         <Route path="/attendance"

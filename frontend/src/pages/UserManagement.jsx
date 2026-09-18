@@ -29,13 +29,14 @@ const RoleBadge = ({ role }) => {
  */
 export default function UserManagement() {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin    = user?.role === 'admin';
+  const isDirector = user?.role === 'director';
 
   const [users, setUsers]         = useState([]);
   const [tls, setTls]             = useState([]);
   const [directors, setDirectors] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal]       = useState(null);  // 'tl' | 'employee' | null
+  const [modal, setModal]       = useState(null);  // 'tl' | 'employee' | 'director' | null
   const [editTarget, setEditTarget]   = useState(null);  // user to edit
   const [confirmDelete, setConfirmDelete] = useState(null); // user to delete
   const [deletingId, setDeletingId]   = useState(null);
@@ -53,7 +54,7 @@ export default function UserManagement() {
   }, []);
 
   const loadTLs = useCallback(async () => {
-    if (!isAdmin) return;
+    if (!isAdmin && !isDirector) return;
     try {
       const { data } = await api.get('/users?role=tl');
       setTls(data);
@@ -83,6 +84,9 @@ export default function UserManagement() {
     if (newUser.role === 'tl') {
       setTls((prev) => [newUser, ...prev]);
     }
+    if (newUser.role === 'director') {
+      setDirectors((prev) => [newUser, ...prev]);
+    }
   };
 
   const handleDelete = async (u) => {
@@ -109,30 +113,30 @@ export default function UserManagement() {
 
   // Determine what roles are shown based on the current user's perspective
   // TL: only sees employees managed by themselves (backend already filters)
-  // Admin: sees all users (from the GET /users endpoint)
+  // Director: sees TLs and telecallers in own hierarchy (backend scoped)
+  // Admin: sees TLs + telecallers (directors shown in separate section)
   const visibleUsers = isAdmin
     ? users.filter((u) => ['tl', 'telecaller'].includes(u.role))
-    : users; // TL backend already scopes to own employees
+    : users; // TL/Director: backend already scopes correctly
 
   return (
     <div className="max-w-4xl">
       <div className="flex items-center justify-between mb-5">
         <h2 className="page-title">
-          {isAdmin ? 'User Management' : 'My Employees'}
+          {isAdmin ? 'User Management' : isDirector ? 'My Team' : 'My Employees'}
         </h2>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {isAdmin && (
-            <button
-              onClick={() => setModal('tl')}
-              className="btn-ghost text-sm"
-            >
+            <button onClick={() => setModal('director')} className="btn-ghost text-sm">
+              + Create Director
+            </button>
+          )}
+          {(isAdmin || isDirector) && (
+            <button onClick={() => setModal('tl')} className="btn-ghost text-sm">
               + Create Team Lead
             </button>
           )}
-          <button
-            onClick={() => setModal('employee')}
-            className="btn-primary text-sm"
-          >
+          <button onClick={() => setModal('employee')} className="btn-primary text-sm">
             + Create Employee
           </button>
         </div>
@@ -283,6 +287,70 @@ export default function UserManagement() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Admin: Directors section */}
+      {isAdmin && directors.length > 0 && (
+        <div className="mt-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Directors</h3>
+          <div className="card overflow-hidden p-0">
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-100">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Email</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Role</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {directors.map((d) => (
+                    <tr key={d._id} className={`hover:bg-gray-50 transition-colors ${!d.isActive ? 'opacity-50' : ''}`}>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{d.name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{d.email}</td>
+                      <td className="px-4 py-3"><RoleBadge role={d.role} /></td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded font-medium
+                          ${d.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {d.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => setEditTarget(d)}
+                          title="Edit director"
+                          className="w-7 h-7 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5
+                                 m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="sm:hidden divide-y divide-gray-100">
+              {directors.map((d) => (
+                <div key={d._id} className={`px-4 py-3 flex items-center justify-between gap-2 ${!d.isActive ? 'opacity-50' : ''}`}>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{d.name}</p>
+                    <p className="text-xs text-gray-500 truncate">{d.email}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    <RoleBadge role={d.role} />
+                    <button onClick={() => setEditTarget(d)} className="text-xs text-gray-400 hover:text-blue-600">Edit</button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

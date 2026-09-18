@@ -27,6 +27,7 @@ const {
   bulkAssign,
   importCSV,
   getDashboardStats,
+  assignEmployee,
 } = require('../controllers/leadsController');
 
 const { protect, authorize } = require('../middleware/auth');
@@ -46,6 +47,7 @@ router.post('/bulk-assign', authorize('admin', 'director'), bulkAssign);
 router.post('/import-csv', authorize('admin'), heavyOpLimiter, csvUpload.single('file'), importCSV);
 
 router.get('/:id', getLead);
+router.put('/:id/assign-employee', authorize('admin', 'director', 'tl'), assignEmployee);
 router.put('/:id', updateLead);
 router.delete('/:id', authorize('admin'), deleteLead);
 

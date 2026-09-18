@@ -1,6 +1,6 @@
 const Lead = require('../models/Lead');
 const { normalisePhone, normaliseForDedupe } = require('../utils/phoneUtils');
-const { pickNextDirector } = require('../utils/allocationEngine');
+const { pickNextDirector, pickNextEmployee } = require('../utils/allocationEngine');
 const syncToSheets = require('../utils/syncToSheets');
 const { regenerateDirectorView } = require('../utils/syncToSheets');
 const audit = require('../utils/auditService');   // FIXED: was missing, caused ERR_HTTP_HEADERS_SENT
@@ -156,7 +156,18 @@ const importOcrLeads = async (req, res) => {
         // (not just within this request — picks continue from the
         // persisted cycleRemaining/currentPointer).
         const pick = await pickNextDirector();
-        if (pick) { leadData.assignedDirector = pick.directorId; leadData.status = 'Allocated'; }
+        if (pick) {
+          leadData.assignedDirector = pick.directorId;
+          leadData.status = 'Allocated';
+          // Req 1: Phase 2 employee allocation — attempt to assign an
+          // eligible present employee immediately. If none is present,
+          // leave assignedTelecaller null; the attendance-trigger
+          // allocator will pick it up when an employee marks present.
+          try {
+            const empId = await pickNextEmployee(pick.directorId);
+            if (empId) leadData.assignedTelecaller = empId;
+          } catch (_) {}
+        }
       } catch (_) {}
       // PHASE C: insertMany() below bypasses Lead.js's pre('save')
       // hook, so OCR-imported leads need leadId assigned explicitly —

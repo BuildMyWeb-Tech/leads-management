@@ -54,16 +54,16 @@ test('R2-UM-03: updateUser controller rejects role=admin', async () => {
   };
   await usersController.updateUser(mockReq, mockRes);
   assert.equal(respondedStatus, 400, 'role=admin must be rejected with 400');
-  assert.match(respondedBody.message, /tl or telecaller/i);
+  assert.match(respondedBody.message, /tl, telecaller, or director/i);
 });
 
-// ── R2-UM-04: role restriction — director not allowed ─────────────
-test('R2-UM-04: updateUser controller rejects role=director', async () => {
+// ── R2-UM-04: role restriction — superadmin not allowed ───────────
+test('R2-UM-04: updateUser controller rejects role=superadmin', async () => {
   const usersController = require('../controllers/usersController');
   let respondedStatus = null;
   const mockReq = {
     params: { id: '000000000000000000000001' },
-    body: { role: 'director' },
+    body: { role: 'superadmin' },
     user: { _id: '000000000000000000000099', role: 'admin' },
   };
   const mockRes = {
@@ -71,7 +71,7 @@ test('R2-UM-04: updateUser controller rejects role=director', async () => {
     json() { return this; },
   };
   await usersController.updateUser(mockReq, mockRes);
-  assert.equal(respondedStatus, 400, 'role=director must be rejected with 400');
+  assert.equal(respondedStatus, 400, 'role=superadmin must be rejected with 400');
 });
 
 // ── R2-UM-05: allowed roles pass validation ───────────────────────
